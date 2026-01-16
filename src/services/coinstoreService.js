@@ -21,11 +21,24 @@ class CoinStoreService {
     // Add request interceptor for authentication if needed
     this.client.interceptors.request.use(
       (config) => {
+        const logData = {
+          method: config.method?.toUpperCase(),
+          url: config.url,
+          baseURL: config.baseURL,
+          params: config.params,
+          data: config.data,
+          timestamp: new Date().toISOString()
+        };
+        logger.info('CoinStore API Request:', logData);
         logger.debug(`CoinStore API Request: ${config.method?.toUpperCase()} ${config.url}`);
         return config;
       },
       (error) => {
-        logger.error('CoinStore API Request Error:', error);
+        logger.error('CoinStore API Request Error:', {
+          error: error.message,
+          stack: error.stack,
+          timestamp: new Date().toISOString()
+        });
         return Promise.reject(error);
       }
     );
@@ -33,11 +46,25 @@ class CoinStoreService {
     // Add response interceptor
     this.client.interceptors.response.use(
       (response) => {
+        const logData = {
+          status: response.status,
+          url: response.config.url,
+          method: response.config.method?.toUpperCase(),
+          dataSize: JSON.stringify(response.data).length,
+          timestamp: new Date().toISOString()
+        };
+        logger.info('CoinStore API Response:', logData);
         logger.debug(`CoinStore API Response: ${response.status} ${response.config.url}`);
         return response;
       },
       (error) => {
-        logger.error('CoinStore API Response Error:', error.response?.data || error.message);
+        logger.error('CoinStore API Response Error:', {
+          status: error.response?.status,
+          url: error.config?.url,
+          method: error.config?.method?.toUpperCase(),
+          error: error.response?.data || error.message,
+          timestamp: new Date().toISOString()
+        });
         return Promise.reject(error);
       }
     );
@@ -144,6 +171,78 @@ class CoinStoreService {
       };
     } catch (error) {
       logger.error('Error getting transaction status from CoinStore:', error);
+      return {
+        success: false,
+        error: error.response?.data || { message: error.message }
+      };
+    }
+  }
+
+  /**
+   * Get all symbols with latest prices
+   * @param {string} symbols - Optional comma-separated list of symbols (e.g., "btcusdt,eosusdt")
+   * @returns {Promise<Object>} List of symbols with prices
+   */
+  async getAllSymbols(symbols = null) {
+    try {
+      const params = symbols ? { symbol: symbols } : {};
+      const response = await this.client.get('/v1/ticker/price', { params });
+
+      logger.info('CoinStore API: getAllSymbols - Success', {
+        symbolCount: response.data?.data?.length || 0,
+        symbols: symbols || 'all'
+      });
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error getting all symbols from CoinStore:', {
+        error: error.response?.data || error.message,
+        symbols
+      });
+      return {
+        success: false,
+        error: error.response?.data || { message: error.message }
+      };
+    }
+  }
+
+  /**
+   * Get detailed symbol information
+   * @param {Array<number>} symbolIds - Array of symbol IDs
+   * @param {Array<string>} symbolCodes - Optional array of symbol codes
+   * @returns {Promise<Object>} Detailed symbol information
+   */
+  async getSymbolDetails(symbolIds = [], symbolCodes = []) {
+    try {
+      const requestBody = {};
+      if (symbolIds.length > 0) {
+        requestBody.symbolIds = symbolIds;
+      }
+      if (symbolCodes.length > 0) {
+        requestBody.symbolCodes = symbolCodes;
+      }
+
+      const response = await this.client.post('/v2/public/config/spot/symbols', requestBody);
+
+      logger.info('CoinStore API: getSymbolDetails - Success', {
+        symbolIdCount: symbolIds.length,
+        symbolCodeCount: symbolCodes.length,
+        resultCount: response.data?.data?.length || 0
+      });
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error getting symbol details from CoinStore:', {
+        error: error.response?.data || error.message,
+        symbolIds,
+        symbolCodes
+      });
       return {
         success: false,
         error: error.response?.data || { message: error.message }

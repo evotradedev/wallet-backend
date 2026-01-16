@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const { errorHandler } = require('./middleware/errorHandler');
 const exchangeRoutes = require('./routes/exchangeRoutes');
+const symbolRoutes = require('./routes/symbolRoutes');
 const logger = require('./utils/logger');
 
 const app = express();
@@ -28,6 +29,7 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/api/exchange', exchangeRoutes);
+app.use('/api/symbols', symbolRoutes);
 
 // 404 handler
 app.use((req, res) => {
