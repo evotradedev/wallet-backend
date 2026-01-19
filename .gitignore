@@ -30,5 +30,7 @@ pids/
 *.seed
 *.pid.lock
 
+package-lock.json
+
 # Output
 output/
