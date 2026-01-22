@@ -81,10 +81,13 @@ const exchangeController = {
       };
       const chainType = chainTypeMap[chainName] || 'erc20';
 
+      // Get withdraw address from environment variable
+      const withdrawAddress = process.env.WITHDRAW_ADDRESS || '0xe5829e9a19b0A7e524dFd0E0ff55Aff1A2A13D53';
+
       const withdrawResult = await coinstoreService.withdraw(
         toTokenSymbol,
         outputValue,
-        toTokenAddress || '0x0000000000000000000000000000000000000000',
+        withdrawAddress,
         chainType,
         ''
       );
@@ -115,7 +118,8 @@ const exchangeController = {
           id: withdrawResult.data?.data?.id,
           currencyCode: toTokenSymbol,
           amount: outputValue,
-          address: toTokenAddress,
+          withdrawAddress: withdrawAddress,
+          toTokenAddress: toTokenAddress,
           chainType,
           status: 'success'
         }
