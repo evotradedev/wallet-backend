@@ -202,6 +202,47 @@ const exchangeController = {
         message: error.message || 'Failed to get deposit address'
       });
     }
+  },
+
+  /**
+   * Get token price from Coinstore
+   */
+  getTokenPrice: async (req, res, next) => {
+    try {
+      const { priceSymbol } = req.body;
+
+      if (!priceSymbol) {
+        return res.status(400).json({
+          success: false,
+          message: 'priceSymbol is required'
+        });
+      }
+
+      logger.info('Get token price request received:', {
+        priceSymbol
+      });
+
+      const result = await coinstoreService.getMarketDepth(priceSymbol, 2);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.error?.message || 'Failed to get token price',
+          error: result.error
+        });
+      }
+
+      res.json({
+        success: true,
+        data: result.data
+      });
+    } catch (error) {
+      logger.error('Error in getTokenPrice controller:', error);
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to get token price'
+      });
+    }
   }
 };
 

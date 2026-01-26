@@ -391,6 +391,64 @@ class CoinStoreService {
   }
 
   /**
+   * Get market depth for a symbol (returns lastPrice)
+   * @param {string} symbol - Trading pair symbol (e.g., "ETHUSDT")
+   * @param {number} depth - Depth level (default: 2)
+   * @returns {Promise<Object>} Market depth data with lastPrice
+   */
+  async getMarketDepth(symbol, depth = 2) {
+    try {
+      const url = `${this.baseURL}/api/v1/market/depth/${symbol}?depth=${depth}`;
+      
+      logger.info('CoinStore API: getMarketDepth - Request', {
+        url,
+        symbol,
+        depth
+      });
+
+      const response = await axios.get(url, {
+        timeout: this.timeout
+      });
+
+      // Check response code
+      if (response.data.code !== 0 && response.data.code !== '0') {
+        logger.error('CoinStore API: getMarketDepth - Failed', {
+          code: response.data.code,
+          message: response.data.message
+        });
+        return {
+          success: false,
+          error: {
+            code: response.data.code,
+            message: response.data.message
+          }
+        };
+      }
+
+      logger.info('CoinStore API: getMarketDepth - Success', {
+        symbol: response.data.data?.symbol,
+        lastPrice: response.data.data?.lastPrice
+      });
+
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error) {
+      logger.error('Error getting market depth from CoinStore:', {
+        error: error.response?.data || error.message,
+        symbol,
+        depth,
+        stack: error.stack
+      });
+      return {
+        success: false,
+        error: error.response?.data || { message: error.message }
+      };
+    }
+  }
+
+  /**
    * Create order on Coinstore
    * @param {Object} orderParams - Order parameters
    * @param {string} orderParams.symbol - Trading pair symbol (e.g., "BTCUSDT")

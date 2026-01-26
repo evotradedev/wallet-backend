@@ -25,4 +25,11 @@ router.post('/withdraw', exchangeValidators.withdraw, exchangeController.withdra
  */
 router.post('/deposit-address', exchangeValidators.getDepositAddress, exchangeController.getDepositAddress);
 
+/**
+ * @route   POST /api/exchange/token-price
+ * @desc    Get token price from Coinstore
+ * @access  Public
+ */
+router.post('/token-price', exchangeController.getTokenPrice);
+
 module.exports = router;
