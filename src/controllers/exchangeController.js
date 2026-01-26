@@ -30,46 +30,50 @@ const exchangeController = {
         chainName
       });
 
-      // Step 1: Create BUY order
-      // BUY order: Buy TO tokens (symbol: TOUSDT) with quantity = FROM input value
-      // Note: For MARKET BUY orders, we should use ordAmt (amount in quote currency)
-      // but per user requirements, using ordQty
-      const buyOrderResult = await coinstoreService.createOrder({
-        symbol: `${fromTokenSymbol}USDT`, // Trading pair: TO token vs USDT
-        side: 'BUY',
-        ordType: 'MARKET',
-        ordQty: inputValue // FROM input value (as per user requirement)
-      });
+      let buyOrderResult = null;
+      let sellOrderResult = null;
 
-      if (!buyOrderResult.success) {
-        return res.status(400).json({
-          swapResult: false,
-          message: 'Failed to create BUY order',
-          error: buyOrderResult.error
+      // Step 1: Create SELL order if fromTokenSymbol is not USDT
+      // SELL order: Sell FROM tokens to get USDT
+      if (fromTokenSymbol !== 'USDT') {
+        sellOrderResult = await coinstoreService.createOrder({
+          symbol: `${fromTokenSymbol}USDT`, // Trading pair: FROM token vs USDT
+          side: 'SELL',
+          ordType: 'MARKET',
+          ordQty: inputValue // FROM input value
         });
+
+        if (!sellOrderResult.success) {
+          return res.status(400).json({
+            swapResult: false,
+            message: 'Failed to create SELL order',
+            error: sellOrderResult.error
+          });
+        }
+
+        logger.info('SELL order created successfully:', sellOrderResult.data);
       }
 
-      logger.info('BUY order created successfully:', buyOrderResult.data);
-
-      // Step 2: Create SELL order
-      // SELL order: Sell FROM tokens (symbol: FROMUSDT) with quantity = TO output value
-      // Note: This may need adjustment based on actual trading logic
-      const sellOrderResult = await coinstoreService.createOrder({
-        symbol: `${toTokenSymbol}USDT`, // Trading pair: FROM token vs USDT
-        side: 'SELL',
-        ordType: 'MARKET',
-        ordQty: outputValue // TO output value (as per user requirement)
-      });
-
-      if (!sellOrderResult.success) {
-        return res.status(400).json({
-          swapResult: false,
-          message: 'Failed to create SELL order',
-          error: sellOrderResult.error
+      // Step 2: Create BUY order if toTokenSymbol is not USDT
+      // BUY order: Buy TO tokens using USDT
+      if (toTokenSymbol !== 'USDT') {
+        buyOrderResult = await coinstoreService.createOrder({
+          symbol: `${toTokenSymbol}USDT`, // Trading pair: TO token vs USDT
+          side: 'BUY',
+          ordType: 'MARKET',
+          ordQty: outputValue // TO output value
         });
-      }
 
-      logger.info('SELL order created successfully:', sellOrderResult.data);
+        if (!buyOrderResult.success) {
+          return res.status(400).json({
+            swapResult: false,
+            message: 'Failed to create BUY order',
+            error: buyOrderResult.error
+          });
+        }
+
+        logger.info('BUY order created successfully:', buyOrderResult.data);
+      }
 
       // Step 3: Withdraw TO output value
       // Determine chain type from chain name
@@ -102,8 +106,8 @@ const exchangeController = {
 
       // Success response
       logger.info('Swap completed successfully:', {
-        buyOrder: buyOrderResult.data,
-        sellOrder: sellOrderResult.data,
+        buyOrder: buyOrderResult?.data,
+        sellOrder: sellOrderResult?.data,
         withdrawal: withdrawResult.data
       });
 
@@ -111,8 +115,8 @@ const exchangeController = {
         swapResult: true,
         message: 'Swap completed successfully',
         orders: {
-          buy: buyOrderResult.data,
-          sell: sellOrderResult.data
+          ...(buyOrderResult && { buy: buyOrderResult.data }),
+          ...(sellOrderResult && { sell: sellOrderResult.data })
         },
         withdrawal: {
           id: withdrawResult.data?.data?.id,
