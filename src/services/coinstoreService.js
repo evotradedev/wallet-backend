@@ -398,7 +398,7 @@ class CoinStoreService {
    */
   async getMarketDepth(symbol, depth = 2) {
     try {
-      const url = `${this.baseURL}/api/v1/market/depth/${symbol}?depth=${depth}`;
+      const url = `${this.baseURL}/v1/market/depth/${symbol}?depth=${depth}`;
       
       logger.info('CoinStore API: getMarketDepth - Request', {
         url,
