@@ -188,14 +188,13 @@ const exchangeController = {
       };
       
       const chainType = chainTypeMap[chain] || chain || 'erc20';
-      const requestCurrencyCode = currencyCode + chainType;
 
       logger.info('Get deposit address request received:', {
         requestCurrencyCode,
         chainType
       });
 
-      const result = await coinstoreService.getDepositAddress(requestCurrencyCode, chainType);
+      const result = await coinstoreService.getDepositAddress(currencyCode, chainType);
 
       if (!result.success) {
         return res.status(400).json({
