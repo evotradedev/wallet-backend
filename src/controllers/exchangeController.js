@@ -78,10 +78,10 @@ const exchangeController = {
       // Step 3: Withdraw TO output value
       // Determine chain type from chain name
       const chainTypeMap = {
-        'Ethereum': 'erc20',
-        'BSC': 'bep20',
-        'Tron': 'trc20',
-        'Solana': 'sol'
+        'Ethereum': 'ERC20',
+        'BSC': 'BEP20',
+        'Tron': 'TRC20',
+        'Solana': 'SOL'
       };
       const chainType = chainTypeMap[chainName] || chainName || 'erc20';
 
@@ -181,21 +181,21 @@ const exchangeController = {
       const { currencyCode, chain } = req.body;
 
       const chainTypeMap = {
-        'Ethereum': 'erc20',
-        'BSC': 'bep20',
-        'Tron': 'trc20',
-        'Solana': 'sol'
+        'Ethereum': 'ERC20',
+        'BSC': 'BEP20',
+        'Tron': 'TRC20',
+        'Solana': 'SOL'
       };
-      const chainType = chainTypeMap[chain] || chain || 'erc20';
-
-      currencyCode = currencyCode + chainType;
       
+      const chainType = chainTypeMap[chain] || chain || 'erc20';
+      const requestCurrencyCode = currencyCode + chainType;
+
       logger.info('Get deposit address request received:', {
-        currencyCode,
+        requestCurrencyCode,
         chainType
       });
 
-      const result = await coinstoreService.getDepositAddress(currencyCode, chainType);
+      const result = await coinstoreService.getDepositAddress(requestCurrencyCode, chainType);
 
       if (!result.success) {
         return res.status(400).json({
