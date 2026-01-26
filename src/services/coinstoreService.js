@@ -1,5 +1,6 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const https = require('https');
 const config = require('../config');
 const logger = require('../utils/logger');
 
@@ -180,26 +181,24 @@ class CoinStoreService {
   /**
    * Generate HMAC signature for CoinStore API authentication
    * @param {string} secretKey - API secret key
-   * @param {number} expires - Expiration timestamp
-   * @param {Buffer} payload - Request payload as buffer
+   * @param {number} expires - Expiration timestamp in milliseconds
+   * @param {string} payloadString - Request payload as JSON string
    * @returns {string} HMAC signature in hex format
    */
-  _generateSignature(secretKey, expires, payload) {
-    // Calculate expires_key = floor(expires / 38800)
-    const expiresKey = Math.floor(expires / 38800).toString();
-    const expiresKeyBuffer = Buffer.from(expiresKey, 'utf-8');
-    const secretKeyBuffer = Buffer.from(secretKey, 'utf-8');
+  _generateSignature(secretKey, expires, payloadString) {
+    // Calculate expires_key = floor(expires / 30000)
+    const expiresKey = Math.floor(expires / 30000).toString();
 
-    // Generate HMAC key: hmac.new(secret_key, expires_key, hashlib.sha256).hexdigest()
-    const hmacKey = crypto
-      .createHmac('sha256', secretKeyBuffer)
-      .update(expiresKeyBuffer)
+    // First HMAC: HMAC-SHA256(secretKey, expiresKey)
+    const key = crypto
+      .createHmac('sha256', Buffer.from(secretKey))
+      .update(Buffer.from(expiresKey))
       .digest('hex');
 
-    // Generate signature: hmac.new(key, payload, hashlib.sha256).hexdigest()
+    // Second HMAC: HMAC-SHA256(key, payloadString)
     const signature = crypto
-      .createHmac('sha256', Buffer.from(hmacKey, 'utf-8'))
-      .update(payload)
+      .createHmac('sha256', Buffer.from(key))
+      .update(Buffer.from(payloadString))
       .digest('hex');
 
     return signature;
@@ -223,15 +222,14 @@ class CoinStoreService {
         chain
       };
 
-      // Convert payload to JSON string and then to buffer
+      // Convert payload to JSON string
       const payloadString = JSON.stringify(requestBody);
-      const payloadBuffer = Buffer.from(payloadString, 'utf-8');
 
-      // Calculate expiration: current time + 1008 seconds
-      const expires = Math.floor(Date.now() / 1000) + 1008;
+      // expires in milliseconds
+      const expires = Date.now();
 
       // Generate HMAC signature
-      const signature = this._generateSignature(this.apiSecret, expires, payloadBuffer);
+      const signature = this._generateSignature(this.apiSecret, expires, payloadString);
 
       // Prepare headers
       const headers = {
@@ -254,9 +252,12 @@ class CoinStoreService {
         expires
       });
 
-      const response = await axios.post(url, requestBody, {
+      const response = await axios.post(url, payloadString, {
         headers,
-        timeout: this.timeout
+        timeout: this.timeout,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false
+        })
       });
 
       // Check response code
@@ -326,26 +327,27 @@ class CoinStoreService {
         requestBody.tag = tag;
       }
 
-      // Convert payload to JSON string and then to buffer
+      // Convert payload to JSON string
       const payloadString = JSON.stringify(requestBody);
-      const payloadBuffer = Buffer.from(payloadString, 'utf-8');
 
-      // Calculate expiration: current time + 1008 seconds
-      const expires = Math.floor(Date.now() / 1000) + 1008;
+      // expires in milliseconds
+      const expires = Date.now();
 
       // Generate HMAC signature
-      const signature = this._generateSignature(this.apiSecret, expires, payloadBuffer);
+      const signature = this._generateSignature(this.apiSecret, expires, payloadString);
 
       // Prepare headers
       const headers = {
         'X-CS-APIKEY': this.apiKey,
         'X-CS-SIGN': signature,
         'X-CS-EXPIRES': expires.toString(),
-        'Content-Type': 'application/json'
+        'exch-language': 'en_US',
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Connection': 'keep-alive'
       };
 
       // Make request to withdrawal endpoint
-      // Note: Using /api/fi/v3/asset/doWithdraw as shown in the API example
       const url = `${this.baseURL}/fi/v3/asset/doWithdraw`;
 
       logger.info('CoinStore API: withdraw - Request', {
@@ -358,9 +360,12 @@ class CoinStoreService {
         expires
       });
 
-      const response = await axios.post(url, requestBody, {
+      const response = await axios.post(url, payloadString, {
         headers,
-        timeout: this.timeout
+        timeout: this.timeout,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false
+        })
       });
 
       logger.info('CoinStore API: withdraw - Success', {
@@ -470,8 +475,7 @@ class CoinStoreService {
       const requestBody = {
         symbol: orderParams.symbol,
         side: orderParams.side,
-        ordType: orderParams.ordType,
-        timestamp: Date.now()
+        ordType: orderParams.ordType
       };
 
       // Add optional parameters
@@ -488,15 +492,14 @@ class CoinStoreService {
         requestBody.clOrdId = orderParams.clOrdId;
       }
 
-      // Convert payload to JSON string and then to buffer
+      // Convert payload to JSON string
       const payloadString = JSON.stringify(requestBody);
-      const payloadBuffer = Buffer.from(payloadString, 'utf-8');
 
-      // Calculate expiration: current time + 1008 seconds
-      const expires = Math.floor(Date.now() / 1000) + 1008;
+      // expires in milliseconds
+      const expires = Date.now();
 
       // Generate HMAC signature
-      const signature = this._generateSignature(this.apiSecret, expires, payloadBuffer);
+      const signature = this._generateSignature(this.apiSecret, expires, payloadString);
 
       // Prepare headers
       const headers = {
@@ -520,9 +523,12 @@ class CoinStoreService {
         expires
       });
 
-      const response = await axios.post(url, requestBody, {
+      const response = await axios.post(url, payloadString, {
         headers,
-        timeout: this.timeout
+        timeout: this.timeout,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false
+        })
       });
 
       // Check response code
