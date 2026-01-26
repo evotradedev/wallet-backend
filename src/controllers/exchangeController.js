@@ -83,7 +83,7 @@ const exchangeController = {
         'Tron': 'trc20',
         'Solana': 'sol'
       };
-      const chainType = chainTypeMap[chainName] || 'erc20';
+      const chainType = chainTypeMap[chainName] || chainName || 'erc20';
 
       // Get withdraw address from environment variable
       const withdrawAddress = process.env.WITHDRAW_ADDRESS || '0xe5829e9a19b0A7e524dFd0E0ff55Aff1A2A13D53';
@@ -180,12 +180,20 @@ const exchangeController = {
     try {
       const { currencyCode, chain } = req.body;
 
+      const chainTypeMap = {
+        'Ethereum': 'erc20',
+        'BSC': 'bep20',
+        'Tron': 'trc20',
+        'Solana': 'sol'
+      };
+      const chainType = chainTypeMap[chain] || chain || 'erc20';
+
       logger.info('Get deposit address request received:', {
         currencyCode,
-        chain
+        chainType
       });
 
-      const result = await coinstoreService.getDepositAddress(currencyCode, chain);
+      const result = await coinstoreService.getDepositAddress(currencyCode, chainType);
 
       if (!result.success) {
         return res.status(400).json({
