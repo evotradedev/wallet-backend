@@ -182,7 +182,7 @@ const exchangeController = {
 
       const chainTypeMap = {
         'Ethereum': 'ERC20',
-        'BSC': 'BEP20',
+        'BSC': 'ERC20',
         'Tron': 'TRC20',
         'Solana': 'SOL'
       };
