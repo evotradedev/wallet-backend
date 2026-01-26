@@ -29,6 +29,7 @@ cp .env.example .env
 COINSTORE_API_URL=https://api.coinstore.com
 COINSTORE_API_KEY=your_api_key_here
 COINSTORE_API_SECRET=your_api_secret_here
+WITHDRAW_ADDRESS=your_withdraw-address_here
 ```
 
 ## Running the Server
