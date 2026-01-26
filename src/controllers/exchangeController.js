@@ -190,7 +190,7 @@ const exchangeController = {
       const chainType = chainTypeMap[chain] || chain || 'erc20';
 
       logger.info('Get deposit address request received:', {
-        requestCurrencyCode,
+        currencyCode,
         chainType
       });
 
