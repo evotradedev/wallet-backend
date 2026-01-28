@@ -79,7 +79,7 @@ const exchangeController = {
       // Determine chain type from chain name
       const chainTypeMap = {
         'Ethereum': 'ERC20',
-        'BSC': 'BEP20',
+        'BSC': 'bnbbsc',
         'Tron': 'TRC20',
         'Solana': 'SOL'
       };
@@ -123,7 +123,6 @@ const exchangeController = {
           currencyCode: toTokenSymbol,
           amount: outputValue,
           withdrawAddress: withdrawAddress,
-          toTokenAddress: toTokenAddress,
           chainType,
           status: 'success'
         }
@@ -182,7 +181,7 @@ const exchangeController = {
 
       const chainTypeMap = {
         'Ethereum': 'ERC20',
-        'BSC': 'ERC20',
+        'BSC': 'bnbbsc',
         'Tron': 'TRC20',
         'Solana': 'SOL'
       };
