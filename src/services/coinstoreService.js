@@ -566,6 +566,100 @@ class CoinStoreService {
       };
     }
   }
+
+  /**
+   * Get order information from Coinstore
+   * @param {Array<number>} orderIds - Array of order IDs
+   * @returns {Promise<Object>} Order information result
+   */
+  async getOrderInfo(orderIds) {
+    try {
+      if (!this.apiKey || !this.apiSecret) {
+        throw new Error('CoinStore API credentials are not configured');
+      }
+
+      // Build request payload
+      const requestBody = {
+        data: {
+          success: orderIds,
+          reject: []
+        }
+      };
+
+      // Convert payload to JSON string
+      const payloadString = JSON.stringify(requestBody);
+
+      // expires in milliseconds
+      const expires = Date.now();
+
+      // Generate HMAC signature
+      const signature = this._generateSignature(this.apiSecret, expires, payloadString);
+
+      // Prepare headers
+      const headers = {
+        'X-CS-APIKEY': this.apiKey,
+        'X-CS-SIGN': signature,
+        'X-CS-EXPIRES': expires.toString(),
+        'exch-language': 'en_US',
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Connection': 'keep-alive'
+      };
+
+      // Make request to get order info endpoint
+      const url = `${this.baseURL}/trade/order/info`;
+
+      logger.info('CoinStore API: getOrderInfo - Request', {
+        url,
+        orderIds,
+        expires
+      });
+
+      const response = await axios.post(url, payloadString, {
+        headers,
+        timeout: this.timeout,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false
+        })
+      });
+
+      // Check response code
+      if (response.data.code !== 0 && response.data.code !== '0') {
+        logger.error('CoinStore API: getOrderInfo - Failed', {
+          code: response.data.code,
+          message: response.data.message
+        });
+        return {
+          success: false,
+          error: {
+            code: response.data.code,
+            message: response.data.message
+          }
+        };
+      }
+
+      logger.info('CoinStore API: getOrderInfo - Success', {
+        orderId: response.data.data?.ordId,
+        ordAmt: response.data.data?.ordAmt,
+        ordQty: response.data.data?.ordQty
+      });
+
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error) {
+      logger.error('Error getting order info from CoinStore:', {
+        error: error.response?.data || error.message,
+        orderIds,
+        stack: error.stack
+      });
+      return {
+        success: false,
+        error: error.response?.data || { message: error.message }
+      };
+    }
+  }
 }
 
 module.exports = new CoinStoreService();
