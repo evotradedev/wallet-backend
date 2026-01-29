@@ -135,7 +135,7 @@ const exchangeController = {
             });
           }
 
-          withdrawAmount = buyOrderInfo.data?.ordQty;
+          withdrawAmount = buyOrderInfo.data?.cumQty;
           logger.info('BUY order information retrieved:', {
             ordId: buyOrderId,
             ordQty: withdrawAmount
