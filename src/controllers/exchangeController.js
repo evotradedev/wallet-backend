@@ -14,9 +14,20 @@ const exchangeController = {
         toTokenAddress, 
         inputValue, 
         outputValue,
+        fromTokenChainId,
+        fromTokenChainName,
+        toTokenChainId,
+        toTokenChainName,
+        // Keep backward compatibility with old parameters
         chainId,
         chainName
       } = req.body;
+
+      // Use new parameters if available, otherwise fallback to old ones
+      const finalFromTokenChainId = fromTokenChainId || chainId;
+      const finalFromTokenChainName = fromTokenChainName || chainName;
+      const finalToTokenChainId = toTokenChainId || chainId;
+      const finalToTokenChainName = toTokenChainName || chainName;
 
       // Log the swap request
       logger.info('Swap request received:', {
@@ -26,8 +37,10 @@ const exchangeController = {
         toTokenAddress,
         inputValue,
         outputValue,
-        chainId,
-        chainName
+        fromTokenChainId: finalFromTokenChainId,
+        fromTokenChainName: finalFromTokenChainName,
+        toTokenChainId: finalToTokenChainId,
+        toTokenChainName: finalToTokenChainName
       });
 
       let buyOrderResult = null;
@@ -135,14 +148,14 @@ const exchangeController = {
       }
 
       // Step 3: Withdraw TO output value
-      // Determine chain type from chain name
+      // Determine chain type from toTokenChainName
       const chainTypeMap = {
         'Ethereum': 'ERC20',
         'BSC': 'bnbbsc',
         'Tron': 'TRC20',
         'Solana': 'SOL'
       };
-      const chainType = chainTypeMap[chainName] || chainName || 'erc20';
+      const toTokenChainType = chainTypeMap[finalToTokenChainName] || finalToTokenChainName || 'erc20';
 
       // Get withdraw address from environment variable
       const withdrawAddress = process.env.WITHDRAW_ADDRESS || '0xe5829e9a19b0A7e524dFd0E0ff55Aff1A2A13D53';
@@ -154,7 +167,7 @@ const exchangeController = {
         toTokenSymbol,
         finalWithdrawAmount,
         withdrawAddress,
-        chainType,
+        toTokenChainType,
         ''
       );
 
@@ -191,7 +204,9 @@ const exchangeController = {
           currencyCode: toTokenSymbol,
           amount: finalWithdrawAmount,
           withdrawAddress: withdrawAddress,
-          chainType,
+          chainType: toTokenChainType,
+          chainId: finalToTokenChainId,
+          chainName: finalToTokenChainName,
           status: 'success'
         }
       });
