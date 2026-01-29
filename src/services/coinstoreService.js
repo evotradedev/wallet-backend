@@ -574,16 +574,41 @@ class CoinStoreService {
    */
   async getCurrencyInformation(currencyCode) {
     try {
-      const url = `${this.baseURL}/v1/public/config/currency`;
-      
+      if (!this.apiKey || !this.apiSecret) {
+        throw new Error('CoinStore API credentials are not configured');
+      }
+
+      // Build query string for GET request
+      const queryString = `currencyCode=${currencyCode}`;
+
+      // expires in milliseconds
+      const expires = Date.now();
+
+      // Generate HMAC signature using query string format (not JSON)
+      // The payload for signature should be the query string: "currencyCode=..."
+      const signature = this._generateSignature(this.apiSecret, expires, queryString);
+
+      // Prepare headers
+      const headers = {
+        'X-CS-APIKEY': this.apiKey,
+        'X-CS-SIGN': signature,
+        'X-CS-EXPIRES': expires.toString(),
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Connection': 'keep-alive'
+      };
+
+      // Make request to get currency information endpoint (GET request with query parameter)
+      const url = `${this.baseURL}/api/fi/v1/common/currency?${queryString}`;
+
       logger.info('CoinStore API: getCurrencyInformation - Request', {
         url,
-        currencyCode
+        currencyCode,
+        expires
       });
 
-      const response = await axios.post(url, {
-        currencyCode: currencyCode
-      }, {
+      const response = await axios.get(url, {
+        headers,
         timeout: this.timeout,
         httpsAgent: new https.Agent({
           rejectUnauthorized: false
