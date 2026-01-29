@@ -32,4 +32,11 @@ router.post('/deposit-address', exchangeValidators.getDepositAddress, exchangeCo
  */
 router.post('/token-price', exchangeController.getTokenPrice);
 
+/**
+ * @route   POST /api/exchange/currency-information
+ * @desc    Get currency information from Coinstore
+ * @access  Public
+ */
+router.post('/currency-information', exchangeController.getCurrencyInformation);
+
 module.exports = router;

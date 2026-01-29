@@ -338,6 +338,63 @@ const exchangeController = {
         message: error.message || 'Failed to get token price'
       });
     }
+  },
+
+  /**
+   * Get currency information from Coinstore
+   */
+  getCurrencyInformation: async (req, res, next) => {
+    try {
+      const { symbol, address } = req.body;
+
+      if (!symbol) {
+        return res.status(400).json({
+          success: false,
+          message: 'symbol is required'
+        });
+      }
+
+      logger.info('Get currency information request received:', {
+        symbol,
+        address
+      });
+
+      // Call coinstore API to get currency information
+      const result = await coinstoreService.getCurrencyInformation(symbol.toUpperCase());
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.error?.message || 'Failed to get currency information',
+          error: result.error
+        });
+      }
+
+      // Find chainData where contractAddress matches the token address
+      let chainData = null;
+      if (address && result.data?.chainDataList) {
+        chainData = result.data.chainDataList.find(
+          item => item.contractAddress && 
+          item.contractAddress.toLowerCase() === address.toLowerCase()
+        );
+      }
+
+      // If no matching chainData found by address, return the first one or null
+      if (!chainData && result.data?.chainDataList?.length > 0) {
+        chainData = result.data.chainDataList[0];
+      }
+
+      res.json({
+        success: true,
+        data: chainData
+      });
+    } catch (error) {
+      logger.error('Error in getCurrencyInformation controller:', error);
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to get currency information'
+      });
+    }
   }
 };
 

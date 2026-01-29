@@ -568,6 +568,66 @@ class CoinStoreService {
   }
 
   /**
+   * Get currency information from Coinstore
+   * @param {string} currencyCode - Currency code (e.g., "ETH")
+   * @returns {Promise<Object>} Currency information with chainDataList
+   */
+  async getCurrencyInformation(currencyCode) {
+    try {
+      const url = `${this.baseURL}/v1/public/config/currency`;
+      
+      logger.info('CoinStore API: getCurrencyInformation - Request', {
+        url,
+        currencyCode
+      });
+
+      const response = await axios.post(url, {
+        currencyCode: currencyCode
+      }, {
+        timeout: this.timeout,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false
+        })
+      });
+
+      // Check response code
+      if (response.data.code !== 0 && response.data.code !== '0') {
+        logger.error('CoinStore API: getCurrencyInformation - Failed', {
+          code: response.data.code,
+          message: response.data.message
+        });
+        return {
+          success: false,
+          error: {
+            code: response.data.code,
+            message: response.data.message
+          }
+        };
+      }
+
+      logger.info('CoinStore API: getCurrencyInformation - Success', {
+        currencyCode: response.data.data?.code,
+        chainDataCount: response.data.data?.chainDataList?.length || 0
+      });
+
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error) {
+      logger.error('Error getting currency information from CoinStore:', {
+        error: error.response?.data || error.message,
+        currencyCode,
+        stack: error.stack
+      });
+      return {
+        success: false,
+        error: error.response?.data || { message: error.message }
+      };
+    }
+  }
+
+  /**
    * Get order information from Coinstore
    * @param {number} orderId - single order ID
    * @returns {Promise<Object>} Order information result
