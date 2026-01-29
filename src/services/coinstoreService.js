@@ -599,7 +599,7 @@ class CoinStoreService {
       };
 
       // Make request to get currency information endpoint (GET request with query parameter)
-      const url = `${this.baseURL}/api/fi/v1/common/currency?${queryString}`;
+      const url = `${this.baseURL}/fi/v1/common/currency?${queryString}`;
 
       logger.info('CoinStore API: getCurrencyInformation - Request', {
         url,
