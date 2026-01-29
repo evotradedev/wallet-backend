@@ -569,31 +569,28 @@ class CoinStoreService {
 
   /**
    * Get order information from Coinstore
-   * @param {Array<number>} orderIds - Array of order IDs
+   * @param {number} orderId - single order ID
    * @returns {Promise<Object>} Order information result
    */
-  async getOrderInfo(orderIds) {
+  async getOrderInfo(orderId) {
     try {
       if (!this.apiKey || !this.apiSecret) {
         throw new Error('CoinStore API credentials are not configured');
       }
+      
+      if (!orderId) {
+        throw new Error('Order ID is required');
+      }
 
-      // Build request payload
-      const requestBody = {
-        data: {
-          success: orderIds,
-          reject: []
-        }
-      };
-
-      // Convert payload to JSON string
-      const payloadString = JSON.stringify(requestBody);
+      // Build query string for GET request
+      const queryString = `ordId=${orderId}`;
 
       // expires in milliseconds
       const expires = Date.now();
 
-      // Generate HMAC signature
-      const signature = this._generateSignature(this.apiSecret, expires, payloadString);
+      // Generate HMAC signature using query string format (not JSON)
+      // The payload for signature should be the query string: "ordId=..."
+      const signature = this._generateSignature(this.apiSecret, expires, queryString);
 
       // Prepare headers
       const headers = {
@@ -606,16 +603,16 @@ class CoinStoreService {
         'Connection': 'keep-alive'
       };
 
-      // Make request to get order info endpoint
-      const url = `${this.baseURL}/trade/order/info`;
+      // Make request to get order info endpoint (GET request with query parameter)
+      const url = `${this.baseURL}/trade/order/orderInfo?${queryString}`;
 
       logger.info('CoinStore API: getOrderInfo - Request', {
         url,
-        orderIds,
+        orderId,
         expires
       });
 
-      const response = await axios.post(url, payloadString, {
+      const response = await axios.get(url, {
         headers,
         timeout: this.timeout,
         httpsAgent: new https.Agent({
@@ -640,6 +637,7 @@ class CoinStoreService {
 
       logger.info('CoinStore API: getOrderInfo - Success', {
         orderId: response.data.data?.ordId,
+        ordState: response.data.data?.ordState,
         ordAmt: response.data.data?.ordAmt,
         ordQty: response.data.data?.ordQty
       });

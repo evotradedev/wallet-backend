@@ -60,7 +60,7 @@ const exchangeController = {
         // Get SELL order information to extract ordAmt
         const sellOrderId = sellOrderResult.data?.ordId;
         if (sellOrderId) {
-          sellOrderInfo = await coinstoreService.getOrderInfo([sellOrderId]);
+          sellOrderInfo = await coinstoreService.getOrderInfo(sellOrderId);
           
           if (!sellOrderInfo.success) {
             return res.status(400).json({
@@ -112,7 +112,7 @@ const exchangeController = {
         // Get BUY order information to extract ordQty for withdrawal
         const buyOrderId = buyOrderResult.data?.ordId;
         if (buyOrderId) {
-          buyOrderInfo = await coinstoreService.getOrderInfo([buyOrderId]);
+          buyOrderInfo = await coinstoreService.getOrderInfo(buyOrderId);
           
           if (!buyOrderInfo.success) {
             return res.status(400).json({
