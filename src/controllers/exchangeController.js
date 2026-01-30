@@ -1,4 +1,5 @@
 const coinstoreService = require('../services/coinstoreService');
+const blockchainService = require('../services/blockchainService');
 const logger = require('../utils/logger');
 
 const exchangeController = {
@@ -18,6 +19,9 @@ const exchangeController = {
         fromTokenChainName,
         toTokenChainId,
         toTokenChainName,
+        walletAddress, // Add wallet address from request
+        fromTokenRpcUrl, // Add fromToken RPC URL
+        toTokenRpcUrl, // Add toToken RPC URL
         // Keep backward compatibility with old parameters
         chainId,
         chainName
@@ -28,6 +32,14 @@ const exchangeController = {
       const finalFromTokenChainName = fromTokenChainName || chainName;
       const finalToTokenChainId = toTokenChainId || chainId;
       const finalToTokenChainName = toTokenChainName || chainName;
+
+      // Validate walletAddress
+      if (!walletAddress) {
+        return res.status(400).json({
+          swapResult: false,
+          message: 'walletAddress is required'
+        });
+      }
 
       // Log the swap request
       logger.info('Swap request received:', {
@@ -40,7 +52,10 @@ const exchangeController = {
         fromTokenChainId: finalFromTokenChainId,
         fromTokenChainName: finalFromTokenChainName,
         toTokenChainId: finalToTokenChainId,
-        toTokenChainName: finalToTokenChainName
+        toTokenChainName: finalToTokenChainName,
+        walletAddress,
+        fromTokenRpcUrl,
+        toTokenRpcUrl
       });
 
       let buyOrderResult = null;
@@ -179,13 +194,93 @@ const exchangeController = {
         });
       }
 
-      // Success response
+      logger.info('Withdrawal completed successfully:', {
+        withdrawAddress: withdrawAddress,
+        amount: finalWithdrawAmount,
+        currencyCode: toTokenSymbol
+      });
+
+      // Step 4: Send token from withdrawAddress to walletAddress
+      let transferResult = null;
+      try {
+        // Determine if native token or ERC20
+        const isNativeToken = !toTokenAddress || 
+                             toTokenAddress === '0x0000000000000000000000000000000000000000' ||
+                             toTokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+
+        // Get token decimals (default to 18)
+        let tokenDecimals = 18;
+        // You might want to fetch this from chainData or token info if available
+
+        transferResult = await blockchainService.sendToken(
+          toTokenAddress,
+          withdrawAddress,
+          walletAddress,
+          finalWithdrawAmount,
+          finalToTokenChainId,
+          finalToTokenChainName,
+          tokenDecimals,
+          toTokenRpcUrl // Pass the RPC URL
+        );
+
+        if (!transferResult.success) {
+          logger.error('Token transfer failed:', transferResult.error);
+          return res.status(400).json({
+            swapResult: false,
+            message: 'Swap completed but token transfer failed',
+            withdrawal: {
+              id: withdrawResult.data?.data?.id,
+              currencyCode: toTokenSymbol,
+              amount: finalWithdrawAmount,
+              withdrawAddress: withdrawAddress,
+              chainType: toTokenChainType,
+              chainId: finalToTokenChainId,
+              chainName: finalToTokenChainName,
+              status: 'success'
+            },
+            transfer: {
+              success: false,
+              error: transferResult.error
+            }
+          });
+        }
+
+        logger.info('Token transfer completed successfully:', {
+          txHash: transferResult.txHash,
+          from: withdrawAddress,
+          to: walletAddress,
+          amount: finalWithdrawAmount
+        });
+      } catch (transferError) {
+        logger.error('Error during token transfer:', transferError);
+        return res.status(400).json({
+          swapResult: false,
+          message: 'Swap completed but token transfer failed',
+          withdrawal: {
+            id: withdrawResult.data?.data?.id,
+            currencyCode: toTokenSymbol,
+            amount: finalWithdrawAmount,
+            withdrawAddress: withdrawAddress,
+            chainType: toTokenChainType,
+            chainId: finalToTokenChainId,
+            chainName: finalToTokenChainName,
+            status: 'success'
+          },
+          transfer: {
+            success: false,
+            error: transferError.message
+          }
+        });
+      }
+
+      // Success response with transfer result
       logger.info('Swap completed successfully:', {
         buyOrder: buyOrderResult?.data,
         sellOrder: sellOrderResult?.data,
         buyOrderInfo: buyOrderInfo?.data,
         sellOrderInfo: sellOrderInfo?.data,
-        withdrawal: withdrawResult.data
+        withdrawal: withdrawResult.data,
+        transfer: transferResult
       });
 
       res.json({
@@ -208,6 +303,16 @@ const exchangeController = {
           chainId: finalToTokenChainId,
           chainName: finalToTokenChainName,
           status: 'success'
+        },
+        transfer: {
+          success: true,
+          txHash: transferResult.txHash,
+          from: withdrawAddress,
+          to: walletAddress,
+          amount: finalWithdrawAmount,
+          tokenAddress: toTokenAddress,
+          chainId: finalToTokenChainId,
+          chainName: finalToTokenChainName
         }
       });
     } catch (error) {
