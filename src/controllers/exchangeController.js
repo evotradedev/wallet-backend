@@ -4,9 +4,108 @@ const logger = require('../utils/logger');
 
 const exchangeController = {
   /**
-   * Execute token swap
+   * Process transfer fee: Buy native token and withdraw it
    */
-  executeSwap: async (req, res, next) => {
+  processTransferFee: async (transferfeeUSDT, chainNativeSymbol, toTokenChainType, withdrawAddress) => {
+    try {
+      // Step 1: Create BUY order for native token using transferfeeUSDT
+      const buyOrderResult = await coinstoreService.createOrder({
+        symbol: `${chainNativeSymbol}USDT`, // Trading pair: Native token vs USDT
+        side: 'BUY',
+        ordType: 'MARKET',
+        ordAmt: transferfeeUSDT.toString() // Use transferfeeUSDT
+      });
+
+      if (!buyOrderResult.success) {
+        return {
+          success: false,
+          error: 'Failed to create BUY order for transfer fee',
+          details: buyOrderResult.error
+        };
+      }
+
+      logger.info('Transfer fee BUY order created successfully:', buyOrderResult.data);
+
+      // Step 2: Get order information to extract cumQty
+      const buyOrderId = buyOrderResult.data?.ordId;
+      if (!buyOrderId) {
+        return {
+          success: false,
+          error: 'Order ID not found in BUY order result'
+        };
+      }
+
+      const buyOrderInfo = await coinstoreService.getOrderInfo(buyOrderId);
+      
+      if (!buyOrderInfo.success) {
+        return {
+          success: false,
+          error: 'Failed to get BUY order information',
+          details: buyOrderInfo.error
+        };
+      }
+
+      const cumQty = buyOrderInfo.data?.cumQty;
+      if (!cumQty) {
+        return {
+          success: false,
+          error: 'cumQty not found in order information'
+        };
+      }
+
+      logger.info('Transfer fee BUY order information retrieved:', {
+        ordId: buyOrderId,
+        cumQty: cumQty
+      });
+
+      // Step 3: Withdraw native token
+      const withdrawResult = await coinstoreService.withdraw(
+        chainNativeSymbol, // currencyCode: native symbol
+        cumQty.toString(), // amount: cumQty of native token
+        withdrawAddress, // address: same withdraw address
+        toTokenChainType, // chainType: toTokenChainType
+        '' // tag: empty
+      );
+
+      if (!withdrawResult.success) {
+        return {
+          success: false,
+          error: 'Withdrawal of native token failed',
+          details: withdrawResult.error
+        };
+      }
+
+      logger.info('Transfer fee native token withdrawal completed successfully:', {
+        withdrawAddress: withdrawAddress,
+        amount: cumQty,
+        currencyCode: chainNativeSymbol
+      });
+
+      return {
+        success: true,
+        data: {
+          buyOrder: buyOrderResult.data,
+          buyOrderInfo: buyOrderInfo.data,
+          withdrawal: withdrawResult.data
+        }
+      };
+    } catch (error) {
+      logger.error('Error in processTransferFee:', {
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+      return {
+        success: false,
+        error: error.message || 'Transfer fee processing failed'
+      };
+    }
+  },
+
+  /**
+   * Execute main token swap (existing logic)
+   */
+  executeMainSwap: async (req, res, next) => {
     try {
       const { 
         fromTokenSymbol, 
@@ -312,6 +411,108 @@ const exchangeController = {
           chainName: finalToTokenChainName
         }
       });
+    } catch (error) {
+      logger.error('Error in executeMainSwap controller:', {
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+      res.status(400).json({
+        swapResult: false,
+        message: error.message || "Swap failed"
+      });
+    }
+  },
+
+  /**
+   * Execute token swap (main entry point - now handles transfer fee first)
+   */
+  executeSwap: async (req, res, next) => {
+    try {
+      const { 
+        fromTokenSymbol, 
+        fromTokenAddress, 
+        toTokenSymbol, 
+        toTokenAddress, 
+        inputValue, 
+        outputValue,
+        fromTokenChainId,
+        fromTokenChainName,
+        toTokenChainId,
+        toTokenChainName,
+        walletAddress,
+        fromTokenRpcUrl,
+        toTokenRpcUrl,
+        transferfeeUSDT,
+        chainNativeSymbol
+      } = req.body;
+
+      // Validate walletAddress
+      if (!walletAddress) {
+        return res.status(400).json({
+          swapResult: false,
+          message: 'walletAddress is required'
+        });
+      }
+
+      // Log the swap request
+      logger.info('Swap request received:', {
+        fromTokenSymbol,
+        toTokenSymbol,
+        inputValue,
+        outputValue,
+        transferfeeUSDT,
+        chainNativeSymbol
+      });
+
+      // Step 1: Process transfer fee if transferfeeUSDT and chainNativeSymbol are provided
+      let transferFeeResult = null;
+      if (transferfeeUSDT && chainNativeSymbol && parseFloat(transferfeeUSDT) > 0) {
+        // Determine chain type from toTokenChainName
+        const chainTypeMap = {
+          'Ethereum': 'ERC20',
+          'BSC': 'bnbbsc',
+          'Tron': 'TRC20',
+          'Solana': 'SOL'
+        };
+        const toTokenChainType = chainTypeMap[toTokenChainName] || toTokenChainName || 'erc20';
+
+        // Get withdraw address from environment variable
+        const withdrawAddress = process.env.WITHDRAW_ADDRESS || '0xe5829e9a19b0A7e524dFd0E0ff55Aff1A2A13D53';
+
+        transferFeeResult = await exchangeController.processTransferFee(
+          transferfeeUSDT,
+          chainNativeSymbol,
+          toTokenChainType,
+          withdrawAddress
+        );
+
+        if (!transferFeeResult.success) {
+          return res.status(400).json({
+            swapResult: false,
+            message: 'Transfer fee processing failed',
+            transferFeeError: transferFeeResult.error,
+            details: transferFeeResult.details
+          });
+        }
+
+        logger.info('Transfer fee processed successfully');
+      }
+
+      // Step 2: Process main swap using the updated input value
+      // The inputValue is already the updated value from frontend (expectedValue - transferfeeUSDT)
+      // Create a new request object with the same body (inputValue is already updated)
+      const mainSwapReq = {
+        ...req,
+        body: {
+          ...req.body
+          // inputValue is already the updated value from frontend
+        }
+      };
+
+      // Call executeMainSwap with the request
+      return await exchangeController.executeMainSwap(mainSwapReq, res, next);
+
     } catch (error) {
       logger.error('Error in executeSwap controller:', {
         error: error.message,
