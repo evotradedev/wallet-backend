@@ -43,14 +43,6 @@ const exchangeValidators = {
       .withMessage('outputValue is required')
       .isString()
       .withMessage('outputValue must be a string'),
-    body('chainId')
-      .optional()
-      .isInt({ min: 1 })
-      .withMessage('chainId must be a positive integer'),
-    body('chainName')
-      .optional()
-      .isString()
-      .withMessage('chainName must be a string'),
     handleValidationErrors
   ],
 

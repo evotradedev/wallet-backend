@@ -21,17 +21,14 @@ const exchangeController = {
         toTokenChainName,
         walletAddress, // Add wallet address from request
         fromTokenRpcUrl, // Add fromToken RPC URL
-        toTokenRpcUrl, // Add toToken RPC URL
-        // Keep backward compatibility with old parameters
-        chainId,
-        chainName
+        toTokenRpcUrl // Add toToken RPC URL
       } = req.body;
 
-      // Use new parameters if available, otherwise fallback to old ones
-      const finalFromTokenChainId = fromTokenChainId || chainId;
-      const finalFromTokenChainName = fromTokenChainName || chainName;
-      const finalToTokenChainId = toTokenChainId || chainId;
-      const finalToTokenChainName = toTokenChainName || chainName;
+      // Use the new parameters directly
+      const finalFromTokenChainId = fromTokenChainId;
+      const finalFromTokenChainName = fromTokenChainName;
+      const finalToTokenChainId = toTokenChainId;
+      const finalToTokenChainName = toTokenChainName;
 
       // Validate walletAddress
       if (!walletAddress) {
