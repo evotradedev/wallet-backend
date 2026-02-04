@@ -909,7 +909,13 @@ class CoinStoreService {
 
         // Find the withdrawal by ID
         const withdrawList = historyResult.data?.withdrawList || [];
-        const withdrawal = withdrawList.find(w => w.id === parseInt(withdrawId));
+        const withdrawal = withdrawList.find(w => {
+          console.log("withdraw item: ", w);
+          if (w.id == parseInt(withdrawId)) {
+            return w;
+          }
+          
+        });
 
         if (withdrawal) {
           const status = withdrawal.status;
