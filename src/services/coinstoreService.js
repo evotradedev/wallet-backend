@@ -369,9 +369,10 @@ class CoinStoreService {
       });
 
       logger.info('CoinStore API: withdraw - Success', {
-        withdrawalId: response.data?.data?.id,
+        withdrawalId: response.data?.data,
         code: response.data?.code,
-        message: response.data?.message
+        message: response.data?.message,
+        responseData: response.data
       });
 
       return {
@@ -882,8 +883,8 @@ class CoinStoreService {
 
       // Get today's date range for filtering
       const today = new Date();
-      const startDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 00:00:00`;
-      const endDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 23:59:59`;
+      const startDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const endDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
       while (Date.now() - startTime < maxWaitMs) {
         // Get withdrawal history
