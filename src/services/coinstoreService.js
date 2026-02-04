@@ -892,8 +892,8 @@ class CoinStoreService {
           currencyCode,
           startDate,
           endDate,
-          withdrawId.toString(),
-          10,
+          parseInt(withdrawId),
+          1000,
           '',
           ''
         );
@@ -911,6 +911,9 @@ class CoinStoreService {
         const withdrawList = historyResult.data?.withdrawList || [];
         const withdrawal = withdrawList.find(w => {
           console.log("withdraw item: ", w);
+          console.log("withdraw id: ", parseInt(withdrawId));
+          console.log("w: ", w.id);
+
           if (w.id == parseInt(withdrawId)) {
             return w;
           }
