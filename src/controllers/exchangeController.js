@@ -75,10 +75,48 @@ const exchangeController = {
         };
       }
 
-      logger.info('Transfer fee native token withdrawal completed successfully:', {
+      // Extract withdrawal ID from response
+      // Response format: { code: '0', message: 'Succeed', data: '1798079' }
+      const withdrawId = withdrawResult.data?.data;
+      
+      if (!withdrawId) {
+        return {
+          success: false,
+          error: 'Withdrawal ID not found in withdrawal response'
+        };
+      }
+
+      logger.info('Transfer fee withdrawal request successful:', {
+        withdrawId: withdrawId,
         withdrawAddress: withdrawAddress,
         amount: cumQty,
         currencyCode: chainNativeSymbol
+      });
+
+      // Step 4: Wait for withdrawal to complete (max 5 minutes)
+      const withdrawalStatus = await coinstoreService.waitForWithdrawalCompletion(
+        withdrawId,
+        chainNativeSymbol,
+        5, // maxWaitMinutes
+        10 // pollIntervalSeconds
+      );
+
+      if (!withdrawalStatus.success) {
+        return {
+          success: false,
+          error: 'Withdrawal completion check failed',
+          details: withdrawalStatus.error,
+          withdrawId
+        };
+      }
+
+      logger.info('Transfer fee native token withdrawal completed successfully:', {
+        withdrawId: withdrawId,
+        withdrawAddress: withdrawAddress,
+        amount: cumQty,
+        currencyCode: chainNativeSymbol,
+        txId: withdrawalStatus.data?.txId,
+        elapsedMs: withdrawalStatus.elapsedMs
       });
 
       return {
@@ -86,7 +124,8 @@ const exchangeController = {
         data: {
           buyOrder: buyOrderResult.data,
           buyOrderInfo: buyOrderInfo.data,
-          withdrawal: withdrawResult.data
+          withdrawal: withdrawResult.data,
+          withdrawalStatus: withdrawalStatus.data
         }
       };
     } catch (error) {
@@ -290,10 +329,48 @@ const exchangeController = {
         });
       }
 
-      logger.info('Withdrawal completed successfully:', {
+      // Extract withdrawal ID from response
+      // Response format: { code: '0', message: 'Succeed', data: '1798079' }
+      const withdrawId = withdrawResult.data?.data;
+      
+      if (!withdrawId) {
+        return res.status(400).json({
+          swapResult: false,
+          message: 'Withdrawal ID not found in withdrawal response'
+        });
+      }
+
+      logger.info('Withdrawal request successful:', {
+        withdrawId: withdrawId,
         withdrawAddress: withdrawAddress,
         amount: finalWithdrawAmount,
         currencyCode: toTokenSymbol
+      });
+
+      // Wait for withdrawal to complete (max 5 minutes)
+      const withdrawalStatus = await coinstoreService.waitForWithdrawalCompletion(
+        withdrawId,
+        toTokenSymbol,
+        5, // maxWaitMinutes
+        10 // pollIntervalSeconds
+      );
+
+      if (!withdrawalStatus.success) {
+        return res.status(400).json({
+          swapResult: false,
+          message: 'Withdrawal completion check failed',
+          withdrawalError: withdrawalStatus.error,
+          withdrawId: withdrawId
+        });
+      }
+
+      logger.info('Withdrawal completed successfully:', {
+        withdrawId: withdrawId,
+        withdrawAddress: withdrawAddress,
+        amount: finalWithdrawAmount,
+        currencyCode: toTokenSymbol,
+        txId: withdrawalStatus.data?.txId,
+        elapsedMs: withdrawalStatus.elapsedMs
       });
 
       // Step 4: Send token from withdrawAddress to walletAddress

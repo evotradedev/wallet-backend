@@ -743,6 +743,268 @@ class CoinStoreService {
       };
     }
   }
+
+  /**
+   * Get withdrawal history
+   * @param {string} currencyCode - Currency code (optional)
+   * @param {string} startDate - Start date in format 'yyyy-MM-dd HH:mm:ss' (optional)
+   * @param {string} endDate - End date in format 'yyyy-MM-dd HH:mm:ss' (optional)
+   * @param {number} fromId - Withdrawal ID to start from (optional)
+   * @param {number} limit - Number of results per request, max 1000, default 500 (optional)
+   * @param {string} externalId - External ID (optional)
+   * @param {string} label - Label (optional)
+   * @returns {Promise<Object>} Withdrawal history result
+   */
+  async getWithdrawalHistory(currencyCode = '', startDate = '', endDate = '', fromId = '', limit = 10, externalId = '', label = '') {
+    try {
+      if (!this.apiKey || !this.apiSecret) {
+        throw new Error('CoinStore API credentials are not configured');
+      }
+
+      // Build request payload
+      const requestBody = {
+        currencyCode,
+        startDate,
+        endDate,
+        fromId: fromId ? fromId.toString() : '',
+        limit: limit.toString(),
+        externalId,
+        label
+      };
+
+      // Convert payload to JSON string
+      const payloadString = JSON.stringify(requestBody);
+
+      // expires in milliseconds
+      const expires = Date.now();
+
+      // Generate HMAC signature
+      const signature = this._generateSignature(this.apiSecret, expires, payloadString);
+
+      // Prepare headers
+      const headers = {
+        'X-CS-APIKEY': this.apiKey,
+        'X-CS-SIGN': signature,
+        'X-CS-EXPIRES': expires.toString(),
+        'exch-language': 'en_US',
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Connection': 'keep-alive'
+      };
+
+      // Make request to withdrawal history endpoint
+      const url = `${this.baseURL}/fi/v3/asset/withdraw/record/list`;
+
+      logger.info('CoinStore API: getWithdrawalHistory - Request', {
+        url,
+        currencyCode,
+        startDate,
+        endDate,
+        fromId,
+        limit,
+        expires
+      });
+
+      const response = await axios.post(url, payloadString, {
+        headers,
+        timeout: this.timeout,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false
+        })
+      });
+
+      // Check response code
+      if (response.data.code !== 0 && response.data.code !== '0') {
+        logger.error('CoinStore API: getWithdrawalHistory - Failed', {
+          code: response.data.code,
+          message: response.data.message
+        });
+        return {
+          success: false,
+          error: {
+            code: response.data.code,
+            message: response.data.message
+          }
+        };
+      }
+
+      logger.info('CoinStore API: getWithdrawalHistory - Success', {
+        withdrawListCount: response.data.data?.withdrawList?.length || 0
+      });
+
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error) {
+      logger.error('Error getting withdrawal history from CoinStore:', {
+        error: error.response?.data || error.message,
+        currencyCode,
+        startDate,
+        endDate,
+        fromId,
+        stack: error.stack
+      });
+      return {
+        success: false,
+        error: error.response?.data || { message: error.message }
+      };
+    }
+  }
+
+  /**
+   * Wait for withdrawal to complete by polling withdrawal history
+   * @param {string} withdrawId - Withdrawal ID to check
+   * @param {string} currencyCode - Currency code
+   * @param {number} maxWaitMinutes - Maximum wait time in minutes (default: 5)
+   * @param {number} pollIntervalSeconds - Polling interval in seconds (default: 10)
+   * @returns {Promise<Object>} Withdrawal status result
+   */
+  async waitForWithdrawalCompletion(withdrawId, currencyCode, maxWaitMinutes = 5, pollIntervalSeconds = 10) {
+    try {
+      if (!withdrawId) {
+        return {
+          success: false,
+          error: 'Withdrawal ID is required'
+        };
+      }
+
+      const maxWaitMs = maxWaitMinutes * 60 * 1000;
+      const pollIntervalMs = pollIntervalSeconds * 1000;
+      const startTime = Date.now();
+
+      logger.info('Waiting for withdrawal completion:', {
+        withdrawId,
+        currencyCode,
+        maxWaitMinutes,
+        pollIntervalSeconds
+      });
+
+      // Get today's date range for filtering
+      const today = new Date();
+      const startDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 00:00:00`;
+      const endDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 23:59:59`;
+
+      while (Date.now() - startTime < maxWaitMs) {
+        // Get withdrawal history
+        const historyResult = await this.getWithdrawalHistory(
+          currencyCode,
+          startDate,
+          endDate,
+          withdrawId.toString(),
+          10,
+          '',
+          ''
+        );
+
+        if (!historyResult.success) {
+          logger.warn('Failed to get withdrawal history, retrying...', {
+            error: historyResult.error,
+            elapsedMs: Date.now() - startTime
+          });
+          await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+          continue;
+        }
+
+        // Find the withdrawal by ID
+        const withdrawList = historyResult.data?.withdrawList || [];
+        const withdrawal = withdrawList.find(w => w.id === parseInt(withdrawId));
+
+        if (withdrawal) {
+          const status = withdrawal.status;
+          logger.info('Withdrawal status check:', {
+            withdrawId,
+            status,
+            statusName: this._getStatusName(status),
+            elapsedMs: Date.now() - startTime
+          });
+
+          // Status 5 = Completed
+          if (status === 5) {
+            logger.info('Withdrawal completed successfully:', {
+              withdrawId,
+              currencyCode,
+              amount: withdrawal.amount,
+              txId: withdrawal.txId,
+              elapsedMs: Date.now() - startTime
+            });
+            return {
+              success: true,
+              data: withdrawal,
+              elapsedMs: Date.now() - startTime
+            };
+          }
+
+          // Status 2 = Rejected, 4 = Payment failed, 6 = Cancelled
+          if (status === 2 || status === 4 || status === 6) {
+            logger.error('Withdrawal failed or was rejected:', {
+              withdrawId,
+              status,
+              statusName: this._getStatusName(status)
+            });
+            return {
+              success: false,
+              error: `Withdrawal ${this._getStatusName(status).toLowerCase()}`,
+              data: withdrawal
+            };
+          }
+
+          // Status 0 = Not reviewed, 1 = Approved, 3 = Payment in progress
+          // Continue waiting
+        } else {
+          logger.warn('Withdrawal not found in history yet, continuing to wait...', {
+            withdrawId,
+            elapsedMs: Date.now() - startTime
+          });
+        }
+
+        // Wait before next poll
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+      }
+
+      // Timeout reached
+      logger.error('Withdrawal completion timeout:', {
+        withdrawId,
+        currencyCode,
+        maxWaitMinutes,
+        elapsedMs: Date.now() - startTime
+      });
+      return {
+        success: false,
+        error: `Withdrawal completion timeout after ${maxWaitMinutes} minutes`,
+        withdrawId
+      };
+    } catch (error) {
+      logger.error('Error waiting for withdrawal completion:', {
+        error: error.message,
+        withdrawId,
+        currencyCode,
+        stack: error.stack
+      });
+      return {
+        success: false,
+        error: error.message || 'Error waiting for withdrawal completion'
+      };
+    }
+  }
+
+  /**
+   * Get status name from status code
+   * @param {number} status - Status code
+   * @returns {string} Status name
+   */
+  _getStatusName(status) {
+    const statusMap = {
+      0: 'Not reviewed',
+      1: 'Approved',
+      2: 'Rejected',
+      3: 'Payment in progress',
+      4: 'Payment failed',
+      5: 'Completed',
+      6: 'Cancelled'
+    };
+    return statusMap[status] || 'Unknown';
+  }
 }
 
 module.exports = new CoinStoreService();
