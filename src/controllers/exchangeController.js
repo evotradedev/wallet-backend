@@ -354,6 +354,9 @@ const exchangeController = {
           currencyCode: toTokenSymbol,
           error: withdrawalStatus.error
         });
+
+        // Wait 5 minutes before sending the swap request
+        await new Promise(resolve => setTimeout(resolve, 1000 * 60 * 5));
       } else {
         logger.info('Withdrawal completed successfully:', {
           withdrawId: withdrawId,
