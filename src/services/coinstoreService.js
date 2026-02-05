@@ -892,7 +892,7 @@ class CoinStoreService {
           currencyCode,
           startDate,
           endDate,
-          parseInt(withdrawId),
+          '',
           1000,
           '',
           ''

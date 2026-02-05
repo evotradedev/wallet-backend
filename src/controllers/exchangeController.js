@@ -97,7 +97,7 @@ const exchangeController = {
       const withdrawalStatus = await coinstoreService.waitForWithdrawalCompletion(
         withdrawId,
         chainNativeSymbol,
-        5, // maxWaitMinutes
+        1, // maxWaitMinutes
         10 // pollIntervalSeconds
       );
 
