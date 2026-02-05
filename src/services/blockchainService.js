@@ -26,6 +26,84 @@ class BlockchainService {
     }
   }
 
+  _maskRpcUrl(rpcUrl) {
+    if (!rpcUrl) return rpcUrl;
+    try {
+      const u = new URL(rpcUrl);
+      // Strip query params/hash (often contain API keys)
+      u.search = '';
+      u.hash = '';
+
+      // Mask last path segment if it looks like an API key
+      const parts = u.pathname.split('/').filter(Boolean);
+      if (parts.length > 0) {
+        const last = parts[parts.length - 1];
+        if (typeof last === 'string' && last.length > 16) {
+          parts[parts.length - 1] = `${last.slice(0, 6)}…${last.slice(-4)}`;
+          u.pathname = `/${parts.join('/')}`;
+        }
+      }
+      return u.toString();
+    } catch (_) {
+      // Fallback: strip query string if present
+      return String(rpcUrl).split('?')[0];
+    }
+  }
+
+  _formatEthersError(error, context = {}) {
+    if (!error) {
+      return { ...context, message: 'Unknown error' };
+    }
+
+    const toStr = (v) => {
+      try {
+        if (v == null) return v;
+        if (typeof v === 'string') return v;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'bigint') return v.toString();
+        if (typeof v?.toString === 'function') return v.toString();
+        return v;
+      } catch (_) {
+        return undefined;
+      }
+    };
+
+    const formatted = {
+      ...context,
+      message: error.message,
+      code: error.code,
+      reason: error.reason,
+      shortMessage: error.shortMessage,
+      data: error.data,
+      method: error.method
+    };
+
+    if (error.transaction) {
+      formatted.transaction = {
+        to: error.transaction.to,
+        from: error.transaction.from,
+        nonce: error.transaction.nonce,
+        type: error.transaction.type,
+        chainId: error.transaction.chainId,
+        value: toStr(error.transaction.value),
+        gasLimit: toStr(error.transaction.gasLimit),
+        gasPrice: toStr(error.transaction.gasPrice),
+        maxFeePerGas: toStr(error.transaction.maxFeePerGas),
+        maxPriorityFeePerGas: toStr(error.transaction.maxPriorityFeePerGas)
+      };
+    }
+
+    if (error.receipt) {
+      formatted.receipt = {
+        status: error.receipt.status,
+        blockNumber: error.receipt.blockNumber,
+        transactionHash: error.receipt.transactionHash
+      };
+    }
+
+    return formatted;
+  }
+
   /**
    * Get provider for a specific chain
    */
@@ -35,6 +113,11 @@ class BlockchainService {
     if (!rpcUrl) {
       throw new Error(`RPC URL not configured for chainId: ${chainId}`);
     }
+    logger.debug('BlockchainService: using RPC provider', {
+      chainId,
+      rpcUrl: this._maskRpcUrl(rpcUrl),
+      customRpcUrlProvided: Boolean(customRpcUrl)
+    });
     return new ethers.providers.JsonRpcProvider(rpcUrl);
   }
 
@@ -110,6 +193,8 @@ class BlockchainService {
    * Send native token (ETH, BNB, etc.)
    */
   async sendNativeToken(fromAddress, toAddress, amount, chainId, customRpcUrl = null) {
+    const rpcUrl = customRpcUrl || this.rpcUrls[chainId];
+    const maskedRpcUrl = this._maskRpcUrl(rpcUrl);
     try {
       const wallet = this.getWallet(chainId, customRpcUrl);
       const provider = wallet.provider;
@@ -119,12 +204,26 @@ class BlockchainService {
         throw new Error(`Wallet address ${wallet.address} does not match fromAddress ${fromAddress}`);
       }
 
-      // Get fee data for the transaction
-      const feeData = await this.getFeeData(chainId, provider);
+      const valueWei = ethers.utils.parseEther(amount.toString());
+
+      const [network, fromBalanceWei, pendingNonce, feeData] = await Promise.all([
+        provider.getNetwork().catch(() => null),
+        provider.getBalance(fromAddress).catch(() => null),
+        provider.getTransactionCount(fromAddress, 'pending').catch(() => null),
+        this.getFeeData(chainId, provider).catch(() => null)
+      ]);
+
+      if (network?.chainId && network.chainId !== chainId) {
+        logger.warn('RPC chainId mismatch (native transfer):', {
+          expectedChainId: chainId,
+          actualChainId: network.chainId,
+          rpcUrl: maskedRpcUrl
+        });
+      }
       
       const txOptions = {
         to: toAddress,
-        value: ethers.utils.parseEther(amount.toString())
+        value: valueWei
       };
       
       // Set gas fees based on chain type
@@ -137,6 +236,31 @@ class BlockchainService {
         txOptions.gasPrice = feeData.gasPrice;
       }
 
+      // Try to estimate gas (helps debug "insufficient funds" / "intrinsic gas too low")
+      try {
+        txOptions.gasLimit = await wallet.estimateGas(txOptions);
+      } catch (gasErr) {
+        logger.debug('Native transfer gas estimation failed:', this._formatEthersError(gasErr, {
+          chainId,
+          rpcUrl: maskedRpcUrl,
+          from: fromAddress,
+          to: toAddress,
+          amount
+        }));
+      }
+
+      logger.debug('Native transfer preflight:', {
+        chainId,
+        rpcUrl: maskedRpcUrl,
+        from: fromAddress,
+        to: toAddress,
+        amount,
+        valueWei: valueWei.toString(),
+        fromBalanceWei: fromBalanceWei?.toString?.(),
+        fromBalance: fromBalanceWei ? ethers.utils.formatEther(fromBalanceWei) : undefined,
+        pendingNonce
+      });
+
       const tx = await wallet.sendTransaction(txOptions);
 
       logger.info('Native token transfer transaction sent:', {
@@ -145,6 +269,9 @@ class BlockchainService {
         to: toAddress,
         amount: amount,
         chainId: chainId,
+        rpcUrl: maskedRpcUrl,
+        nonce: tx.nonce,
+        gasLimit: txOptions.gasLimit?.toString?.(),
         maxFeePerGas: txOptions.maxFeePerGas?.toString(),
         maxPriorityFeePerGas: txOptions.maxPriorityFeePerGas?.toString(),
         gasPrice: txOptions.gasPrice?.toString()
@@ -152,6 +279,12 @@ class BlockchainService {
 
       // Wait for transaction confirmation
       const receipt = await tx.wait();
+      logger.info('Native token transfer confirmed:', {
+        txHash: tx.hash,
+        chainId,
+        status: receipt?.status,
+        blockNumber: receipt?.blockNumber
+      });
       
       return {
         success: true,
@@ -159,10 +292,20 @@ class BlockchainService {
         receipt: receipt
       };
     } catch (error) {
-      logger.error('Error sending native token:', error);
+      const details = this._formatEthersError(error, {
+        chainId,
+        rpcUrl: maskedRpcUrl,
+        from: fromAddress,
+        to: toAddress,
+        amount
+      });
+      logger.error('Error sending native token:', details);
       return {
         success: false,
-        error: error.message
+        error: error.message,
+        code: error.code,
+        reason: error.reason,
+        details
       };
     }
   }
@@ -171,6 +314,8 @@ class BlockchainService {
    * Send ERC20 token
    */
   async sendERC20Token(tokenAddress, fromAddress, toAddress, amount, chainId, decimals = 18, customRpcUrl = null) {
+    const rpcUrl = customRpcUrl || this.rpcUrls[chainId];
+    const maskedRpcUrl = this._maskRpcUrl(rpcUrl);
     try {
       const wallet = this.getWallet(chainId, customRpcUrl);
       const provider = wallet.provider;
@@ -194,8 +339,21 @@ class BlockchainService {
       // Calculate amount with decimals
       const amountBN = ethers.utils.parseUnits(amount.toString(), tokenDecimals);
 
-      // Get fee data for the transaction
-      const feeData = await this.getFeeData(chainId, provider);
+      const [network, nativeBalanceWei, tokenBalanceBN, pendingNonce, feeData] = await Promise.all([
+        provider.getNetwork().catch(() => null),
+        provider.getBalance(fromAddress).catch(() => null),
+        contract.balanceOf(fromAddress).catch(() => null),
+        provider.getTransactionCount(fromAddress, 'pending').catch(() => null),
+        this.getFeeData(chainId, provider).catch(() => null)
+      ]);
+
+      if (network?.chainId && network.chainId !== chainId) {
+        logger.warn('RPC chainId mismatch (ERC20 transfer):', {
+          expectedChainId: chainId,
+          actualChainId: network.chainId,
+          rpcUrl: maskedRpcUrl
+        });
+      }
       
       // Set gas fees based on chain type
       let txOptions = null;
@@ -212,6 +370,22 @@ class BlockchainService {
         };
       }
 
+      logger.debug('ERC20 transfer preflight:', {
+        chainId,
+        rpcUrl: maskedRpcUrl,
+        tokenAddress,
+        from: fromAddress,
+        to: toAddress,
+        amount,
+        tokenDecimals,
+        amountBN: amountBN.toString(),
+        tokenBalanceBN: tokenBalanceBN?.toString?.(),
+        tokenBalance: tokenBalanceBN ? ethers.utils.formatUnits(tokenBalanceBN, tokenDecimals) : undefined,
+        nativeBalanceWei: nativeBalanceWei?.toString?.(),
+        nativeBalance: nativeBalanceWei ? ethers.utils.formatEther(nativeBalanceWei) : undefined,
+        pendingNonce
+      });
+
       // Send transfer transaction
       const tx = txOptions 
         ? await contract.transfer(toAddress, amountBN, txOptions)
@@ -224,6 +398,8 @@ class BlockchainService {
         to: toAddress,
         amount: amount,
         chainId: chainId,
+        rpcUrl: maskedRpcUrl,
+        nonce: tx.nonce,
         maxFeePerGas: txOptions?.maxFeePerGas?.toString(),
         maxPriorityFeePerGas: txOptions?.maxPriorityFeePerGas?.toString(),
         gasPrice: txOptions?.gasPrice?.toString()
@@ -231,6 +407,12 @@ class BlockchainService {
 
       // Wait for transaction confirmation
       const receipt = await tx.wait();
+      logger.info('ERC20 token transfer confirmed:', {
+        txHash: tx.hash,
+        chainId,
+        status: receipt?.status,
+        blockNumber: receipt?.blockNumber
+      });
 
       return {
         success: true,
@@ -238,10 +420,22 @@ class BlockchainService {
         receipt: receipt
       };
     } catch (error) {
-      logger.error('Error sending ERC20 token:', error);
+      const details = this._formatEthersError(error, {
+        chainId,
+        rpcUrl: maskedRpcUrl,
+        tokenAddress,
+        from: fromAddress,
+        to: toAddress,
+        amount,
+        providedDecimals: decimals
+      });
+      logger.error('Error sending ERC20 token:', details);
       return {
         success: false,
-        error: error.message
+        error: error.message,
+        code: error.code,
+        reason: error.reason,
+        details
       };
     }
   }

@@ -909,15 +909,17 @@ class CoinStoreService {
 
         // Find the withdrawal by ID
         const withdrawList = historyResult.data?.withdrawList || [];
+        const targetId = Number.parseInt(withdrawId, 10);
         const withdrawal = withdrawList.find(w => {
-          console.log("withdraw item: ", w);
-          console.log("withdraw id: ", parseInt(withdrawId));
-          console.log("w: ", w.id);
+          const idNum = Number.parseInt(w?.id, 10);
+          return Number.isFinite(idNum) && idNum === targetId;
+        });
 
-          if (w.id == parseInt(withdrawId)) {
-            return w;
-          }
-          
+        logger.debug('Withdrawal history poll result:', {
+          withdrawId: targetId,
+          found: Boolean(withdrawal),
+          withdrawListCount: withdrawList.length,
+          elapsedMs: Date.now() - startTime
         });
 
         if (withdrawal) {

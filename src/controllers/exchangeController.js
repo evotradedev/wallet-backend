@@ -387,7 +387,7 @@ const exchangeController = {
         currencyCode: toTokenSymbol
       });
 
-      // Wait 3 seconds before sending the swap request
+      // Wait briefly so the withdrawal record/tx has time to appear in history
       await new Promise(resolve => setTimeout(resolve, 1000 * 33));
 
       // Wait for withdrawal to complete (max 3 minutes)
@@ -395,7 +395,7 @@ const exchangeController = {
         withdrawId,
         toTokenSymbol,
         3, // maxWaitMinutes
-        10000 // pollIntervalSeconds
+        10 // pollIntervalSeconds
       );
 
       if (!withdrawalStatus.success) {
@@ -434,6 +434,7 @@ const exchangeController = {
       // Retry transfer every 15s for up to 3 hours
       const transferRetryIntervalMs = 15 * 1000;
       const transferMaxWaitMs = 3 * 60 * 60 * 1000;
+      const transferMaxWaitMinutes = Math.round(transferMaxWaitMs / (60 * 1000));
       const transferDeadlineMs = Date.now() + transferMaxWaitMs;
 
       // Get token decimals from request (default to 18)
@@ -450,6 +451,8 @@ const exchangeController = {
 
       let transferAttempt = 0;
       let lastTransferError = null;
+      let lastTransferCode = null;
+      let lastTransferReason = null;
 
       while (Date.now() < transferDeadlineMs) {
         transferAttempt += 1;
@@ -484,6 +487,15 @@ const exchangeController = {
         }
 
         lastTransferError = transferResult?.error || 'Unknown transfer error';
+        lastTransferCode = transferResult?.code || null;
+        lastTransferReason = transferResult?.reason || null;
+
+        logger.debug('Token transfer failure details:', {
+          attempt: transferAttempt,
+          code: lastTransferCode,
+          reason: lastTransferReason,
+          details: transferResult?.details
+        });
 
         const now = Date.now();
         const remainingMs = Math.max(0, transferDeadlineMs - now);
@@ -497,6 +509,8 @@ const exchangeController = {
           tokenAddress: toTokenAddress,
           chainId: finalToTokenChainId,
           chainName: finalToTokenChainName,
+          code: lastTransferCode,
+          reason: lastTransferReason,
           error: lastTransferError,
           nextRetryInMs: sleepMs,
           remainingMs
@@ -510,15 +524,17 @@ const exchangeController = {
       }
 
       if (!transferResult?.success) {
-        logger.error('Token transfer failed (timeout after 15 minutes):', {
+        logger.error(`Token transfer failed (timeout after ${transferMaxWaitMinutes} minutes):`, {
           attempts: transferAttempt,
+          code: lastTransferCode,
+          reason: lastTransferReason,
           error: lastTransferError
         });
         return res.status(400).json({
           swapResult: false,
-          message: 'Swap completed but token transfer failed (timeout after 15 minutes)',
+          message: `Swap completed but token transfer failed (timeout after ${transferMaxWaitMinutes} minutes)`,
           withdrawal: {
-            id: withdrawResult.data?.data?.id,
+            id: withdrawId,
             currencyCode: toTokenSymbol,
             amount: finalWithdrawAmount,
             withdrawAddress: withdrawAddress,
@@ -530,6 +546,8 @@ const exchangeController = {
           transfer: {
             success: false,
             error: lastTransferError,
+            code: lastTransferCode,
+            reason: lastTransferReason,
             attempts: transferAttempt
           }
         });
@@ -557,7 +575,7 @@ const exchangeController = {
           ...(sellOrderInfo && { sell: sellOrderInfo.data })
         },
         withdrawal: {
-          id: withdrawResult.data?.data?.id,
+          id: withdrawId,
           currencyCode: toTokenSymbol,
           amount: finalWithdrawAmount,
           withdrawAddress: withdrawAddress,
