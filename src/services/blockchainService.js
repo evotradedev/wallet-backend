@@ -251,10 +251,7 @@ class BlockchainService {
    */
   async sendToken(tokenAddress, fromAddress, toAddress, amount, chainId, chainName, decimals = 18, customRpcUrl = null) {
     try {
-      // Check if native token
-      const isNativeToken = !tokenAddress || 
-                           tokenAddress === '0x0000000000000000000000000000000000000000' ||
-                           tokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+      const isNativeToken = this.isNativeToken(tokenAddress, chainId);
 
       if (isNativeToken) {
         return await this.sendNativeToken(fromAddress, toAddress, amount, chainId, customRpcUrl);
@@ -268,6 +265,20 @@ class BlockchainService {
         error: error.message
       };
     }
+  }
+
+  /**
+   * Check if tokenAddress represents a native token
+   */
+  isNativeToken(tokenAddress, chainId) {
+    const normalizedToken = tokenAddress ? tokenAddress.toLowerCase() : null;
+    const isPolygonNativeToken =
+      chainId === 137 && normalizedToken === '0x0000000000000000000000000000000000001010';
+
+    return !tokenAddress ||
+      normalizedToken === '0x0000000000000000000000000000000000000000' ||
+      normalizedToken === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ||
+      isPolygonNativeToken;
   }
 }
 
