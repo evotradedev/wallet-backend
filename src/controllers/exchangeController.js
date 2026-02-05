@@ -93,13 +93,13 @@ const exchangeController = {
         currencyCode: chainNativeSymbol
       });
 
-      // // Step 4: Wait for withdrawal to complete (max 5 minutes)
-      // const withdrawalStatus = await coinstoreService.waitForWithdrawalCompletion(
-      //   withdrawId,
-      //   chainNativeSymbol,
-      //   5, // maxWaitMinutes
-      //   10 // pollIntervalSeconds
-      // );
+      // Step 4: Wait for withdrawal to complete (max 5 minutes)
+      const withdrawalStatus = await coinstoreService.waitForWithdrawalCompletion(
+        withdrawId,
+        chainNativeSymbol,
+        5, // maxWaitMinutes
+        10 // pollIntervalSeconds
+      );
 
       if (withdrawId != null) {
         return {
