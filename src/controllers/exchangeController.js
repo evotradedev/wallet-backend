@@ -295,7 +295,7 @@ const exchangeController = {
       
       // Use withdrawAmount from BUY order info, or fallback to outputValue
       // const finalWithdrawAmount = withdrawAmount || outputValue;
-      const finalWithdrawAmount = 5;
+      const finalWithdrawAmount = 20;
       
       /*
       const withdrawResult = await coinstoreService.withdraw(
@@ -376,10 +376,6 @@ const exchangeController = {
       // Step 4: Send token from withdrawAddress to walletAddress
       let transferResult = null;
       try {
-        // Determine if native token or ERC20
-        const isNativeToken = !toTokenAddress || 
-                             toTokenAddress === '0x0000000000000000000000000000000000000000' ||
-                             toTokenAddress.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 
         // Get token decimals (default to 18)
         let tokenDecimals = 18;
@@ -446,15 +442,15 @@ const exchangeController = {
         });
       }
 
-      // Success response with transfer result
-      logger.info('Swap completed successfully:', {
-        buyOrder: buyOrderResult?.data,
-        sellOrder: sellOrderResult?.data,
-        buyOrderInfo: buyOrderInfo?.data,
-        sellOrderInfo: sellOrderInfo?.data,
-        withdrawal: withdrawResult.data,
-        transfer: transferResult
-      });
+      // // Success response with transfer result
+      // logger.info('Swap completed successfully:', {
+      //   buyOrder: buyOrderResult?.data,
+      //   sellOrder: sellOrderResult?.data,
+      //   buyOrderInfo: buyOrderInfo?.data,
+      //   sellOrderInfo: sellOrderInfo?.data,
+      //   withdrawal: withdrawResult.data,
+      //   transfer: transferResult
+      // });
 
       res.json({
         swapResult: true,
