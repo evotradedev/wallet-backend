@@ -149,6 +149,7 @@ const exchangeController = {
       const finalToTokenChainId = toTokenChainId;
       const finalToTokenChainName = toTokenChainName;
 
+      /*
       // Validate walletAddress
       if (!walletAddress) {
         return res.status(400).json({
@@ -277,7 +278,7 @@ const exchangeController = {
         withdrawAmount = ordAmt;
         logger.info('TO token is USDT, using ordAmt as withdrawal amount:', withdrawAmount);
       }
-
+      */
       // Step 3: Withdraw TO output value
       // Determine chain type from toTokenChainName
       const chainTypeMap = {
@@ -286,14 +287,17 @@ const exchangeController = {
         'Tron': 'TRC20',
         'Solana': 'SOL'
       };
+      
       const toTokenChainType = chainTypeMap[finalToTokenChainName] || finalToTokenChainName || 'erc20';
-
+      
       // Get withdraw address from environment variable
       const withdrawAddress = process.env.WITHDRAW_ADDRESS || '0xe5829e9a19b0A7e524dFd0E0ff55Aff1A2A13D53';
-
+      
       // Use withdrawAmount from BUY order info, or fallback to outputValue
-      const finalWithdrawAmount = withdrawAmount || outputValue;
-
+      // const finalWithdrawAmount = withdrawAmount || outputValue;
+      const finalWithdrawAmount = 5;
+      
+      /*
       const withdrawResult = await coinstoreService.withdraw(
         toTokenSymbol,
         finalWithdrawAmount,
@@ -367,6 +371,7 @@ const exchangeController = {
           elapsedMs: withdrawalStatus.elapsedMs
         });
       }
+      */
 
       // Step 4: Send token from withdrawAddress to walletAddress
       let transferResult = null;
@@ -454,14 +459,14 @@ const exchangeController = {
       res.json({
         swapResult: true,
         message: 'Swap completed successfully',
-        orders: {
-          ...(buyOrderResult && { buy: buyOrderResult.data }),
-          ...(sellOrderResult && { sell: sellOrderResult.data })
-        },
-        orderInfo: {
-          ...(buyOrderInfo && { buy: buyOrderInfo.data }),
-          ...(sellOrderInfo && { sell: sellOrderInfo.data })
-        },
+        // orders: {
+        //   ...(buyOrderResult && { buy: buyOrderResult.data }),
+        //   ...(sellOrderResult && { sell: sellOrderResult.data })
+        // },
+        // orderInfo: {
+        //   ...(buyOrderInfo && { buy: buyOrderInfo.data }),
+        //   ...(sellOrderInfo && { sell: sellOrderInfo.data })
+        // },
         withdrawal: {
           id: withdrawResult.data?.data?.id,
           currencyCode: toTokenSymbol,
@@ -537,6 +542,8 @@ const exchangeController = {
         chainNativeSymbol
       });
 
+      /*
+
       // Step 1: Process transfer fee if transferfeeUSDT and chainNativeSymbol are provided
       let transferFeeResult = null;
       if (transferfeeUSDT && chainNativeSymbol && parseFloat(transferfeeUSDT) > 0) {
@@ -570,6 +577,8 @@ const exchangeController = {
 
         logger.info('Transfer fee processed successfully');
       }
+
+      */
 
       // Step 2: Process main swap using the updated input value
       // The inputValue is already the updated value from frontend (expectedValue - transferfeeUSDT)
