@@ -9,10 +9,10 @@ const exchangeController = {
   processTransferFee: async (transferfeeUSDT, chainNativeSymbol, toTokenChainType, withdrawAddress) => {
     try {
       // Step 1: Create BUY order for native token using transferfeeUSDT
-      // Retry every 15s for up to 15 minutes if CoinStore returns:
+      // Retry every 15s for up to 33 minutes if CoinStore returns:
       // { code: 1101, message: 'Insufficient quantity available' }
       const retryIntervalMs = 15 * 1000;
-      const maxWaitMs = 15 * 60 * 1000;
+      const maxWaitMs = 33 * 60 * 1000;
       const deadlineMs = Date.now() + maxWaitMs;
 
       let buyOrderResult = null;
@@ -384,7 +384,7 @@ const exchangeController = {
       });
 
       // Wait 3 seconds before sending the swap request
-      await new Promise(resolve => setTimeout(resolve, 1000 * 3));
+      await new Promise(resolve => setTimeout(resolve, 1000 * 33));
 
       // Wait for withdrawal to complete (max 3 minutes)
       const withdrawalStatus = await coinstoreService.waitForWithdrawalCompletion(
@@ -427,9 +427,9 @@ const exchangeController = {
 
       // Step 4: Send token from withdrawAddress to walletAddress
       let transferResult = null;
-      // Retry transfer every 15s for up to 15 minutes
+      // Retry transfer every 15s for up to 3 hours
       const transferRetryIntervalMs = 15 * 1000;
-      const transferMaxWaitMs = 15 * 60 * 1000;
+      const transferMaxWaitMs = 3 * 60 * 60 * 1000;
       const transferDeadlineMs = Date.now() + transferMaxWaitMs;
 
       // Get token decimals (default to 18)
