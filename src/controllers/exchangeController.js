@@ -93,30 +93,12 @@ const exchangeController = {
         currencyCode: chainNativeSymbol
       });
 
-      // Step 4: Wait for withdrawal to complete (max 5 minutes)
-      const withdrawalStatus = await coinstoreService.waitForWithdrawalCompletion(
-        withdrawId,
-        chainNativeSymbol,
-        5, // maxWaitMinutes
-        10 // pollIntervalSeconds
-      );
-
-      if (withdrawId != null) {
-        return {
-          success: false,
-          error: 'Withdrawal completion check failed',
-          details: withdrawalStatus.error,
-          withdrawId
-        };
-      }
-
-      logger.info('Transfer fee native token withdrawal completed successfully:', {
+      // Step 4: Do not wait for completion. If withdrawId exists, treat as success.
+      logger.info('Transfer fee withdrawal accepted:', {
         withdrawId: withdrawId,
         withdrawAddress: withdrawAddress,
         amount: cumQty,
-        currencyCode: chainNativeSymbol,
-        txId: withdrawalStatus.data?.txId,
-        elapsedMs: withdrawalStatus.elapsedMs
+        currencyCode: chainNativeSymbol
       });
 
       return {
@@ -124,8 +106,7 @@ const exchangeController = {
         data: {
           buyOrder: buyOrderResult.data,
           buyOrderInfo: buyOrderInfo.data,
-          withdrawal: withdrawResult.data,
-          withdrawalStatus: withdrawalStatus.data
+          withdrawal: withdrawResult.data
         }
       };
     } catch (error) {
@@ -352,26 +333,37 @@ const exchangeController = {
         withdrawId,
         toTokenSymbol,
         5, // maxWaitMinutes
-        10 // pollIntervalSeconds
+        10000 // pollIntervalSeconds
       );
 
       if (!withdrawalStatus.success) {
-        return res.status(400).json({
-          swapResult: false,
-          message: 'Withdrawal completion check failed',
-          withdrawalError: withdrawalStatus.error,
-          withdrawId: withdrawId
+        if (!withdrawId) {
+          return res.status(400).json({
+            swapResult: false,
+            message: 'Withdrawal completion check failed',
+            withdrawalError: withdrawalStatus.error,
+            withdrawId: withdrawId
+          });
+        }
+
+        // If withdrawId exists, treat withdrawal as success and continue transfer
+        logger.warn('Withdrawal completion check failed but withdrawId exists; proceeding with transfer.', {
+          withdrawId: withdrawId,
+          withdrawAddress: withdrawAddress,
+          amount: finalWithdrawAmount,
+          currencyCode: toTokenSymbol,
+          error: withdrawalStatus.error
+        });
+      } else {
+        logger.info('Withdrawal completed successfully:', {
+          withdrawId: withdrawId,
+          withdrawAddress: withdrawAddress,
+          amount: finalWithdrawAmount,
+          currencyCode: toTokenSymbol,
+          txId: withdrawalStatus.data?.txId,
+          elapsedMs: withdrawalStatus.elapsedMs
         });
       }
-
-      logger.info('Withdrawal completed successfully:', {
-        withdrawId: withdrawId,
-        withdrawAddress: withdrawAddress,
-        amount: finalWithdrawAmount,
-        currencyCode: toTokenSymbol,
-        txId: withdrawalStatus.data?.txId,
-        elapsedMs: withdrawalStatus.elapsedMs
-      });
 
       // Step 4: Send token from withdrawAddress to walletAddress
       let transferResult = null;
