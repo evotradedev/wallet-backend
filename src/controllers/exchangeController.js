@@ -193,7 +193,9 @@ const exchangeController = {
         toTokenChainName,
         walletAddress, // Add wallet address from request
         fromTokenRpcUrl, // Add fromToken RPC URL
-        toTokenRpcUrl // Add toToken RPC URL
+        toTokenRpcUrl, // Add toToken RPC URL
+        fromTokenDecimals,
+        toTokenDecimals
       } = req.body;
 
       // Use the new parameters directly
@@ -217,6 +219,8 @@ const exchangeController = {
         fromTokenAddress,
         toTokenSymbol,
         toTokenAddress,
+        fromTokenDecimals,
+        toTokenDecimals,
         inputValue,
         outputValue,
         fromTokenChainId: finalFromTokenChainId,
@@ -432,9 +436,17 @@ const exchangeController = {
       const transferMaxWaitMs = 3 * 60 * 60 * 1000;
       const transferDeadlineMs = Date.now() + transferMaxWaitMs;
 
-      // Get token decimals (default to 18)
-      const tokenDecimals = 18;
-      // You might want to fetch this from chainData or token info if available
+      // Get token decimals from request (default to 18)
+      let tokenDecimals = 18;
+      if (toTokenDecimals !== undefined && toTokenDecimals !== null && String(toTokenDecimals).trim() !== '') {
+        const parsedDecimals = Number(String(toTokenDecimals).trim());
+        if (Number.isFinite(parsedDecimals)) {
+          const decimalsInt = Math.trunc(parsedDecimals);
+          if (decimalsInt >= 0 && decimalsInt <= 255) {
+            tokenDecimals = decimalsInt;
+          }
+        }
+      }
 
       let transferAttempt = 0;
       let lastTransferError = null;
