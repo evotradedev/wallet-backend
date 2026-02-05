@@ -9,18 +9,71 @@ const exchangeController = {
   processTransferFee: async (transferfeeUSDT, chainNativeSymbol, toTokenChainType, withdrawAddress) => {
     try {
       // Step 1: Create BUY order for native token using transferfeeUSDT
-      const buyOrderResult = await coinstoreService.createOrder({
-        symbol: `${chainNativeSymbol}USDT`, // Trading pair: Native token vs USDT
-        side: 'BUY',
-        ordType: 'MARKET',
-        ordAmt: transferfeeUSDT.toString() // Use transferfeeUSDT
-      });
+      // Retry every 15s for up to 15 minutes if CoinStore returns:
+      // { code: 1101, message: 'Insufficient quantity available' }
+      const retryIntervalMs = 15 * 1000;
+      const maxWaitMs = 15 * 60 * 1000;
+      const deadlineMs = Date.now() + maxWaitMs;
 
-      if (!buyOrderResult.success) {
+      let buyOrderResult = null;
+      let attempt = 0;
+
+      while (Date.now() < deadlineMs) {
+        attempt += 1;
+
+        buyOrderResult = await coinstoreService.createOrder({
+          symbol: `${chainNativeSymbol}USDT`, // Trading pair: Native token vs USDT
+          side: 'BUY',
+          ordType: 'MARKET',
+          ordAmt: transferfeeUSDT.toString() // Use transferfeeUSDT
+        });
+
+        if (buyOrderResult.success) {
+          break;
+        }
+
+        const err = buyOrderResult?.error || {};
+        const errCode = err?.code;
+        const errMessage = err?.message;
+        const isInsufficientQty =
+          String(errCode) === '1101' ||
+          (typeof errMessage === 'string' && /insufficient quantity available/i.test(errMessage));
+
+        // Only retry for insufficient liquidity/quantity case
+        if (!isInsufficientQty) {
+          return {
+            success: false,
+            error: 'Failed to create BUY order for transfer fee',
+            details: buyOrderResult.error
+          };
+        }
+
+        const now = Date.now();
+        const remainingMs = Math.max(0, deadlineMs - now);
+        const sleepMs = Math.min(retryIntervalMs, remainingMs);
+
+        logger.warn('Transfer fee BUY order failed due to insufficient quantity; retrying...', {
+          attempt,
+          symbol: `${chainNativeSymbol}USDT`,
+          transferfeeUSDT: transferfeeUSDT?.toString?.() || transferfeeUSDT,
+          errCode,
+          errMessage,
+          nextRetryInMs: sleepMs,
+          remainingMs
+        });
+
+        if (sleepMs <= 0) {
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, sleepMs));
+      }
+
+      if (!buyOrderResult?.success) {
         return {
           success: false,
-          error: 'Failed to create BUY order for transfer fee',
-          details: buyOrderResult.error
+          error: 'Failed to create BUY order for transfer fee (timeout after 20 minutes)',
+          details: buyOrderResult?.error
         };
       }
 
@@ -330,8 +383,8 @@ const exchangeController = {
         currencyCode: toTokenSymbol
       });
 
-      // Wait 1 minutes before sending the swap request
-      await new Promise(resolve => setTimeout(resolve, 1000 * 60 * 1));
+      // Wait 3 seconds before sending the swap request
+      await new Promise(resolve => setTimeout(resolve, 1000 * 3));
 
       // Wait for withdrawal to complete (max 3 minutes)
       const withdrawalStatus = await coinstoreService.waitForWithdrawalCompletion(
@@ -360,8 +413,6 @@ const exchangeController = {
           error: withdrawalStatus.error
         });
 
-        // Wait 3 minutes before sending the swap request
-        await new Promise(resolve => setTimeout(resolve, 1000 * 60 * 3));
       } else {
         logger.info('Withdrawal completed successfully:', {
           withdrawId: withdrawId,
@@ -376,56 +427,84 @@ const exchangeController = {
 
       // Step 4: Send token from withdrawAddress to walletAddress
       let transferResult = null;
-      try {
+      // Retry transfer every 15s for up to 15 minutes
+      const transferRetryIntervalMs = 15 * 1000;
+      const transferMaxWaitMs = 15 * 60 * 1000;
+      const transferDeadlineMs = Date.now() + transferMaxWaitMs;
 
-        // Get token decimals (default to 18)
-        let tokenDecimals = 18;
-        // You might want to fetch this from chainData or token info if available
+      // Get token decimals (default to 18)
+      const tokenDecimals = 18;
+      // You might want to fetch this from chainData or token info if available
 
-        transferResult = await blockchainService.sendToken(
-          toTokenAddress,
-          withdrawAddress,
-          walletAddress,
-          finalWithdrawAmount,
-          finalToTokenChainId,
-          finalToTokenChainName,
-          tokenDecimals,
-          toTokenRpcUrl // Pass the RPC URL
-        );
+      let transferAttempt = 0;
+      let lastTransferError = null;
 
-        if (!transferResult.success) {
-          logger.error('Token transfer failed:', transferResult.error);
-          return res.status(400).json({
-            swapResult: false,
-            message: 'Swap completed but token transfer failed',
-            withdrawal: {
-              id: withdrawResult.data?.data?.id,
-              currencyCode: toTokenSymbol,
-              amount: finalWithdrawAmount,
-              withdrawAddress: withdrawAddress,
-              chainType: toTokenChainType,
-              chainId: finalToTokenChainId,
-              chainName: finalToTokenChainName,
-              status: 'success'
-            },
-            transfer: {
-              success: false,
-              error: transferResult.error
-            }
-          });
+      while (Date.now() < transferDeadlineMs) {
+        transferAttempt += 1;
+
+        try {
+          transferResult = await blockchainService.sendToken(
+            toTokenAddress,
+            withdrawAddress,
+            walletAddress,
+            finalWithdrawAmount,
+            finalToTokenChainId,
+            finalToTokenChainName,
+            tokenDecimals,
+            toTokenRpcUrl // Pass the RPC URL
+          );
+        } catch (transferError) {
+          transferResult = {
+            success: false,
+            error: transferError?.message || String(transferError)
+          };
         }
 
-        logger.info('Token transfer completed successfully:', {
-          txHash: transferResult.txHash,
+        if (transferResult?.success) {
+          logger.info('Token transfer completed successfully:', {
+            txHash: transferResult.txHash,
+            from: withdrawAddress,
+            to: walletAddress,
+            amount: finalWithdrawAmount,
+            attempt: transferAttempt
+          });
+          break;
+        }
+
+        lastTransferError = transferResult?.error || 'Unknown transfer error';
+
+        const now = Date.now();
+        const remainingMs = Math.max(0, transferDeadlineMs - now);
+        const sleepMs = Math.min(transferRetryIntervalMs, remainingMs);
+
+        logger.warn('Token transfer failed; retrying...', {
+          attempt: transferAttempt,
           from: withdrawAddress,
           to: walletAddress,
-          amount: finalWithdrawAmount
+          amount: finalWithdrawAmount,
+          tokenAddress: toTokenAddress,
+          chainId: finalToTokenChainId,
+          chainName: finalToTokenChainName,
+          error: lastTransferError,
+          nextRetryInMs: sleepMs,
+          remainingMs
         });
-      } catch (transferError) {
-        logger.error('Error during token transfer:', transferError);
+
+        if (sleepMs <= 0) {
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, sleepMs));
+      }
+
+      if (!transferResult?.success) {
+        logger.error('Token transfer failed (timeout after 15 minutes):', {
+          attempts: transferAttempt,
+          error: lastTransferError
+        });
         return res.status(400).json({
           swapResult: false,
-          message: 'Swap completed but token transfer failed',
+          message: 'Swap completed but token transfer failed (timeout after 15 minutes)',
           withdrawal: {
             id: withdrawResult.data?.data?.id,
             currencyCode: toTokenSymbol,
@@ -438,7 +517,8 @@ const exchangeController = {
           },
           transfer: {
             success: false,
-            error: transferError.message
+            error: lastTransferError,
+            attempts: transferAttempt
           }
         });
       }
