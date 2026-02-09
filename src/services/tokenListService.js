@@ -18,6 +18,7 @@ const LOGO_URI_BY_CURRENCY = {
 
 const TOKENS_CACHE_TTL_MS = Number(process.env.TOKENS_CACHE_TTL_MS) || 10 * 60 * 1000; // 10 minutes
 const TOKENS_CURRENCYINFO_CONCURRENCY = Number(process.env.TOKENS_CURRENCYINFO_CONCURRENCY) || 10;
+const TOKENS_CURRENCYINFO_DELAY_MS = Number(process.env.TOKENS_CURRENCYINFO_DELAY_MS) || 100; // 100ms delay between API calls
 
 let cache = {
   key: null,
@@ -125,6 +126,10 @@ async function buildTokensData({ chains = null } = {}) {
 
   await mapLimit(uniqueCurrencies, TOKENS_CURRENCYINFO_CONCURRENCY, async (currencyCodeUpper) => {
     const result = await coinstoreService.getCurrencyInformation(currencyCodeUpper);
+    
+    // Wait before next API call (configurable via TOKENS_CURRENCYINFO_DELAY_MS)
+    await new Promise(resolve => setTimeout(resolve, TOKENS_CURRENCYINFO_DELAY_MS));
+    
     if (result?.success && result?.data) {
       currencyInfoMap.set(currencyCodeUpper, result.data);
       return;
