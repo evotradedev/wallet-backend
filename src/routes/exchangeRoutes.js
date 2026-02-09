@@ -33,6 +33,13 @@ router.post('/deposit-address', exchangeValidators.getDepositAddress, exchangeCo
 router.post('/token-price', exchangeController.getTokenPrice);
 
 /**
+ * @route   GET /api/exchange/tokens
+ * @desc    Get all tokens data (static tokens.json enriched with Coinstore currency information)
+ * @access  Public
+ */
+router.get('/tokens', exchangeController.getAllTokensData);
+
+/**
  * @route   POST /api/exchange/currency-information
  * @desc    Get currency information from Coinstore
  * @access  Public

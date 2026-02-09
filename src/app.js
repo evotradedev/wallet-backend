@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -17,6 +18,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined', { stream: { write: (message) => logger.info(message.trim()) } }));
+
+// Static assets (served from wallet-backend/public)
+app.use('/public', express.static(path.join(__dirname, '..', 'public')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {

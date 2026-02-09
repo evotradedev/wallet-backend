@@ -1,5 +1,6 @@
 const coinstoreService = require('../services/coinstoreService');
 const blockchainService = require('../services/blockchainService');
+const tokenListService = require('../services/tokenListService');
 const logger = require('../utils/logger');
 
 const exchangeController = {
@@ -783,6 +784,54 @@ const exchangeController = {
         success: false,
         message: error.message || 'Failed to get deposit address'
       });
+    }
+  },
+
+  /**
+   * Get all tokens data (static tokens.json enriched with Coinstore currency information)
+   * Optional query: ?chains=eth,matic,op (comma-separated, matches tokens.json `chain` values)
+   * Optional query: ?refresh=1 to bypass cache
+   */
+  getAllTokensData: async (req, res, next) => {
+    const startTime = Date.now();
+    try {
+      const refresh = String(req.query?.refresh || '').toLowerCase() === '1' ||
+        String(req.query?.refresh || '').toLowerCase() === 'true';
+      const chainsParam = req.query?.chains;
+      const chains =
+        typeof chainsParam === 'string' && chainsParam.trim().length > 0
+          ? chainsParam
+              .split(',')
+              .map((c) => String(c || '').trim().toLowerCase())
+              .filter(Boolean)
+          : null;
+
+      logger.info('Tokens API Request: getAllTokensData', {
+        refresh,
+        chains: chains || 'all',
+        ip: req.ip,
+        timestamp: new Date().toISOString()
+      });
+
+      const result = await tokenListService.getAllTokensData({ chains, refresh });
+
+      const duration = Date.now() - startTime;
+      res.json({
+        success: true,
+        cached: Boolean(result.cached),
+        data: result.data || [],
+        count: result.data?.length || 0,
+        durationMs: duration,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error('Error in getAllTokensData controller:', {
+        error: error.message,
+        stack: error.stack,
+        durationMs: duration
+      });
+      next(error);
     }
   },
 
