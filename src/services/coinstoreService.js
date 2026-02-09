@@ -10,13 +10,16 @@ class CoinStoreService {
     this.apiKey = config.coinstore.apiKey;
     this.apiSecret = config.coinstore.apiSecret;
     this.timeout = config.coinstore.timeout;
+    // User-Agent to avoid Cloudflare bot detection
+    this.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
     this.client = axios.create({
       baseURL: this.baseURL,
       timeout: this.timeout,
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey
+        'X-API-Key': this.apiKey,
+        'User-Agent': this.userAgent
       }
     });
 
@@ -107,37 +110,6 @@ class CoinStoreService {
   }
 
   /**
-   * Get all symbols with latest prices
-   * @param {string} symbols - Optional comma-separated list of symbols (e.g., "btcusdt,eosusdt")
-   * @returns {Promise<Object>} List of symbols with prices
-   */
-  async getAllSymbols(symbols = null) {
-    try {
-      const params = symbols ? { symbol: symbols } : {};
-      const response = await this.client.get('/v1/ticker/price', { params });
-
-      logger.info('CoinStore API: getAllSymbols - Success', {
-        symbolCount: response.data?.data?.length || 0,
-        symbols: symbols || 'all'
-      });
-
-      return {
-        success: true,
-        data: response.data
-      };
-    } catch (error) {
-      logger.error('Error getting all symbols from CoinStore:', {
-        error: error.response?.data || error.message,
-        symbols
-      });
-      return {
-        success: false,
-        error: error.response?.data || { message: error.message }
-      };
-    }
-  }
-
-  /**
    * Get detailed symbol information
    * @param {Array<number>} symbolIds - Array of symbol IDs
    * @param {Array<string>} symbolCodes - Optional array of symbol codes
@@ -176,6 +148,20 @@ class CoinStoreService {
         error: error.response?.data || { message: error.message }
       };
     }
+  }
+
+  /**
+   * Check if response is a Cloudflare challenge page
+   * @param {*} responseData - Response data to check
+   * @returns {boolean} True if response is a Cloudflare challenge
+   */
+  _isCloudflareChallenge(responseData) {
+    if (typeof responseData === 'string') {
+      return responseData.includes('Just a moment...') || 
+             responseData.includes('cf-chl-opt') ||
+             responseData.includes('challenge-platform');
+    }
+    return false;
   }
 
   /**
@@ -239,7 +225,8 @@ class CoinStoreService {
         'exch-language': 'en_US',
         'Content-Type': 'application/json',
         'Accept': '*/*',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'User-Agent': this.userAgent
       };
 
       // Make request to deposit address endpoint
@@ -344,7 +331,8 @@ class CoinStoreService {
         'exch-language': 'en_US',
         'Content-Type': 'application/json',
         'Accept': '*/*',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'User-Agent': this.userAgent
       };
 
       // Make request to withdrawal endpoint
@@ -413,6 +401,9 @@ class CoinStoreService {
       });
 
       const response = await axios.get(url, {
+        headers: {
+          'User-Agent': this.userAgent
+        },
         timeout: this.timeout
       });
 
@@ -510,7 +501,8 @@ class CoinStoreService {
         'exch-language': 'en_US',
         'Content-Type': 'application/json',
         'Accept': '*/*',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'User-Agent': this.userAgent
       };
 
       // Make request to create order endpoint
@@ -596,7 +588,8 @@ class CoinStoreService {
         'X-CS-EXPIRES': expires.toString(),
         'Content-Type': 'application/json',
         'Accept': '*/*',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'User-Agent': this.userAgent
       };
 
       // Make request to get currency information endpoint (GET request with query parameter)
@@ -616,8 +609,23 @@ class CoinStoreService {
         })
       });
 
+      // Check if response is a Cloudflare challenge (even if status is 200)
+      if (this._isCloudflareChallenge(response.data)) {
+        logger.error('CoinStore API: getCurrencyInformation - Cloudflare challenge detected', {
+          currencyCode,
+          message: 'Received Cloudflare challenge page instead of API response'
+        });
+        return {
+          success: false,
+          error: {
+            message: 'Request blocked by Cloudflare. Please check User-Agent header and rate limiting.',
+            cloudflareChallenge: true
+          }
+        };
+      }
+
       // Check response code
-      if (response.data.code !== 0 && response.data.code !== '0') {
+      if (response.data && typeof response.data === 'object' && response.data.code !== 0 && response.data.code !== '0') {
         logger.error('CoinStore API: getCurrencyInformation - Failed', {
           code: response.data.code,
           message: response.data.message
@@ -641,6 +649,22 @@ class CoinStoreService {
         data: response.data.data
       };
     } catch (error) {
+      // Check if error is due to Cloudflare challenge
+      const responseData = error.response?.data;
+      if (this._isCloudflareChallenge(responseData)) {
+        logger.error('Error getting currency information from CoinStore: Cloudflare challenge detected', {
+          currencyCode,
+          message: 'Request blocked by Cloudflare bot protection. This may indicate missing or invalid User-Agent header, rate limiting, or IP reputation issues.'
+        });
+        return {
+          success: false,
+          error: {
+            message: 'Request blocked by Cloudflare. Please check User-Agent header and rate limiting.',
+            cloudflareChallenge: true
+          }
+        };
+      }
+
       logger.error('Error getting currency information from CoinStore:', {
         error: error.response?.data || error.message,
         currencyCode,
@@ -686,7 +710,8 @@ class CoinStoreService {
         'exch-language': 'en_US',
         'Content-Type': 'application/json',
         'Accept': '*/*',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'User-Agent': this.userAgent
       };
 
       // Make request to get order info endpoint (GET request with query parameter)
@@ -790,7 +815,8 @@ class CoinStoreService {
         'exch-language': 'en_US',
         'Content-Type': 'application/json',
         'Accept': '*/*',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'User-Agent': this.userAgent
       };
 
       // Make request to withdrawal history endpoint

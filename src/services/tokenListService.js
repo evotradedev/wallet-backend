@@ -4,6 +4,9 @@ const coinstoreService = require('./coinstoreService');
 const logger = require('../utils/logger');
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+// Placeholder address commonly used to represent the native currency (ETH/BNB/etc.)
+// Note: other parts of the codebase (e.g. blockchainService / exchange UI) treat this as "native".
+const NATIVE_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 const POLYGON_NATIVE_PROXY = '0x0000000000000000000000000000000000001010';
 
 const DEFAULT_LOGO_URI = 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040';
@@ -150,7 +153,7 @@ async function buildTokensData({ chains = null } = {}) {
 
     let contractAddress = safeTrimString(chainData?.contractAddress);
     if (!contractAddress) {
-      contractAddress = ZERO_ADDRESS;
+      contractAddress = NATIVE_ADDRESS;
     }
 
     // Special case: POL should use Polygon native proxy address
