@@ -37,7 +37,7 @@ router.post('/token-price', exchangeController.getTokenPrice);
  * @desc    Get all tokens data (static tokens.json enriched with Coinstore currency information)
  * @access  Public
  */
-router.get('/tokens', exchangeController.getAllTokensData);
+router.get('/tokens', exchangeController.getTokensData);
 
 /**
  * @route   POST /api/exchange/currency-information

@@ -794,7 +794,7 @@ const exchangeController = {
    * Optional query: ?chains=eth,matic,op (comma-separated, matches tokens.json `chain` values)
    * Optional query: ?refresh=1 to bypass cache
    */
-  getAllTokensData: async (req, res, next) => {
+  getTokensData: async (req, res, next) => {
     const startTime = Date.now();
     try {
       const refresh = String(req.query?.refresh || '').toLowerCase() === '1' ||
@@ -808,7 +808,7 @@ const exchangeController = {
               .filter(Boolean)
           : null;
 
-      logger.info('Tokens API Request: getAllTokensData', {
+      logger.info('Tokens API Request: getTokensData', {
         refresh,
         chains: chains || 'all',
         ip: req.ip,
@@ -816,6 +816,29 @@ const exchangeController = {
       });
 
       const result = await tokensInformationService.getTokensData({ chains, refresh });
+
+      // Filter and log only native token information
+      const NATIVE_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+      const POLYGON_NATIVE_PROXY = '0x0000000000000000000000000000000000001010';
+      
+      const nativeTokens = (result.data || []).filter(token => {
+        const address = String(token?.contractAddress || '').toLowerCase();
+        return address === NATIVE_ADDRESS.toLowerCase() || 
+               address === POLYGON_NATIVE_PROXY.toLowerCase();
+      });
+
+      logger.info('Native tokens in response:', {
+        nativeTokensCount: nativeTokens.length,
+        nativeTokens: nativeTokens.map(token => ({
+          tokenId: token.tokenId,
+          tokenName: token.tokenName,
+          currencyCode: token.currencyCode,
+          chainName: token.chainName,
+          contractAddress: token.contractAddress,
+          decimals: token.decimals,
+          Logo_URI: token.Logo_URI
+        }))
+      });
 
       const duration = Date.now() - startTime;
       res.json({
@@ -828,7 +851,7 @@ const exchangeController = {
       });
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.error('Error in getAllTokensData controller:', {
+      logger.error('Error in getTokensData controller:', {
         error: error.message,
         stack: error.stack,
         durationMs: duration
