@@ -34,3 +34,6 @@ package-lock.json
 
 # Output
 output/
+
+# TOkesn data
+public/tokens.json
