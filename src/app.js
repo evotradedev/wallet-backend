@@ -9,7 +9,7 @@ const exchangeRoutes = require('./routes/exchangeRoutes');
 const logger = require('./utils/logger');
 const {
   updateTokensWithContractAddresses,
-  shouldUpdateTokensFile
+  isFirstTokenMissingContractAddress
 } = require('./services/tokensInformationService');
 
 const app = express();
@@ -53,17 +53,19 @@ app.listen(PORT, async () => {
   logger.info(`EvoTrade Backend server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
-  // On startup, only update tokens.json if any token is missing contract address or logoURI
-  logger.info('Backend startup: checking if tokens.json update is needed...');
+  // On startup, update tokens.json from CoinStore only if the first token is missing contract address
+  logger.info('Backend startup: checking first token contract address in tokens.json...');
   try {
-    const needsUpdate = await shouldUpdateTokensFile();
+    const needsUpdate = await isFirstTokenMissingContractAddress();
 
     if (!needsUpdate) {
       logger.info(
-        'Backend startup: tokens.json already has contract addresses and logoURIs for all tokens, skipping update'
+        'Backend startup: first token already has contract address, skipping CoinStore token update'
       );
     } else {
-      logger.info('Backend startup: updating tokens.json with contract addresses...');
+      logger.info(
+        'Backend startup: first token missing contract address, updating tokens.json from CoinStore...'
+      );
       const result = await updateTokensWithContractAddresses();
       if (result.success) {
         logger.info('Backend startup: token update completed successfully', result);

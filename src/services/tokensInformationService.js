@@ -423,11 +423,43 @@ async function shouldUpdateTokensFile() {
   }
 }
 
+/**
+ * Checks the first token in tokens.json and returns true if its contract
+ * address is missing or empty. This is used on backend startup to decide
+ * whether we need to refresh tokens.json from CoinStore.
+ */
+async function isFirstTokenMissingContractAddress() {
+  try {
+    const { tokens } = await readTokensFile();
+    const first = tokens[0];
+    if (!first) {
+      return true;
+    }
+
+    const contractAddress = safeTrimString(
+      first?.contract_address ||
+        first?.contact_address ||
+        first?.contractAddress ||
+        first?.address
+    );
+
+    return !contractAddress;
+  } catch (error) {
+    logger.error('TokenInformationService: Error checking first token contract address', {
+      error: error.message,
+      stack: error.stack
+    });
+    // Be safe and indicate that an update is needed if we cannot read the file
+    return true;
+  }
+}
+
 module.exports = {
   getTokensData,
   updateTokensWithContractAddresses,
   // Also export some low-level utilities if needed elsewhere in the future
   buildTokensData,
-  shouldUpdateTokensFile
+  shouldUpdateTokensFile,
+  isFirstTokenMissingContractAddress
 };
 
