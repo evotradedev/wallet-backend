@@ -293,10 +293,135 @@ async function updateTokensWithContractAddresses() {
     let logoUpdatedCount = 0;
     let skippedCount = 0;
 
-    // Define major tokens (native tokens for each chain)
-    const MAJOR_TOKENS = new Set([
-      'ETH', 'BNB', 'TRX', 'BTC', 'MATIC', 'POL', 'SOL', 'AVAX', 'FTM', 'ATOM', 'DOT', 'ADA'
-    ]);
+    // Define native tokens for each chain
+    // Key: chain name (uppercase), Value: native token symbol (uppercase)
+    const CHAIN_NATIVE_TOKENS = {
+      ETH: 'ETH',
+      ETHEREUM: 'ETH',
+      BNBBSC: 'BNB',
+      BSC: 'BNB',
+      TRX: 'TRX',
+      TRON: 'TRX',
+      BTC: 'BTC',
+      BITCOIN: 'BTC',
+      MATIC: 'MATIC',
+      POLYGON: 'POL',
+      SOL: 'SOL',
+      SOLANA: 'SOL',
+      AVAXC: 'AVAX',
+      AVALANCHE: 'AVAX',
+      FTM: 'FTM',
+      FANTOM: 'FTM',
+      ATOM: 'ATOM',
+      COSMOS: 'ATOM',
+      DOT: 'DOT',
+      POLKADOT: 'DOT',
+      ADA: 'ADA',
+      CARDANO: 'ADA',
+      ARBITRUM: 'ETH',
+      OP: 'ETH',
+      OPTIMISM: 'ETH',
+      BASE: 'ETH',
+      LINEA: 'ETH',
+      SCROLL: 'ETH',
+      ZKSYNCERA: 'ETH',
+      BLAST: 'ETH',
+      MANTA: 'ETH',
+      METIS: 'ETH',
+      STARKNET: 'ETH',
+      ZETA: 'ZETA',
+      SUI: 'SUI',
+      APTOS: 'APT',
+      SEI: 'SEI',
+      SEIEVM: 'SEI',
+      NEAR: 'NEAR',
+      TON: 'TON',
+      KLAY: 'KLAY',
+      KLAYTN: 'KLAY',
+      CELO: 'CELO',
+      MOONBEAM: 'GLMR',
+      HARMONY: 'ONE',
+      CRONOS: 'CRO',
+      KAVA: 'KAVA',
+      OSMOSIS: 'OSMO',
+      INJECTIVE: 'INJ',
+      CELESTIA: 'TIA',
+      STELLAR: 'XLM',
+      XRP: 'XRP',
+      RIPPLE: 'XRP',
+      LITECOIN: 'LTC',
+      LTC: 'LTC',
+      DOGE: 'DOGE',
+      DOGECOIN: 'DOGE',
+      BCH: 'BCH',
+      BITCOINCASH: 'BCH',
+      ETC: 'ETC',
+      ETHEREUMCLASSIC: 'ETC',
+      FIL: 'FIL',
+      FILECOIN: 'FIL',
+      HEDERA: 'HBAR',
+      ALGO: 'ALGO',
+      ALGORAND: 'ALGO',
+      TEZOS: 'XTZ',
+      XTZ: 'XTZ',
+      EOS: 'EOS',
+      IOST: 'IOST',
+      IOTEX: 'IOTX',
+      VECHAIN: 'VET',
+      THETA: 'THETA',
+      QTUM: 'QTUM',
+      CONFLUX: 'CFX',
+      CONFLUXCORE: 'CFX',
+      OASIS: 'ROSE',
+      KSM: 'KSM',
+      KUSAMA: 'KSM',
+      ICP: 'ICP',
+      INTERNETCOMPUTER: 'ICP',
+      FLOW: 'FLOW',
+      MINA: 'MINA',
+      CASPER: 'CSPR',
+      RONIN: 'RON',
+      CORE: 'CORE',
+      HECO: 'HT',
+      FLARE: 'FLR',
+      SONIC: 'S',
+      STACKS: 'STX',
+      TERRA: 'LUNA',
+      KAVA: 'KAVA',
+      AXELAR: 'AXL',
+      MULTIVERSX: 'EGLD',
+      RADIX: 'XRD',
+      ALEO: 'ALEO',
+      ARWEAVE: 'AR',
+      KAS: 'KAS',
+      KASPA: 'KAS',
+      KADENA: 'KDA',
+      ZCASH: 'ZEC',
+      ZEC: 'ZEC',
+      DASH: 'DASH',
+      PIVX: 'PIVX',
+      CHIA: 'XCH',
+      XCH: 'XCH',
+      EVER: 'EVER',
+      EVERSCALE: 'EVER',
+      KOINOS: 'KOIN',
+      NEON3: 'NEO',
+      NEO: 'NEO',
+      NEM: 'XEM',
+      IRONFISH: 'IRON',
+      BITTENSOR: 'TAO',
+      QUBIC: 'QUBIC',
+      NEXUS: 'NXS',
+      HYDRA: 'HYDRA',
+      PHANTASMA: 'SOUL',
+      SOLAR: 'SXP'
+    };
+    
+    // Helper function to check if a token is native for its chain
+    const isNativeToken = (currencyCodeUpper, chainNameUpper) => {
+      const expectedNativeToken = CHAIN_NATIVE_TOKENS[chainNameUpper];
+      return expectedNativeToken && expectedNativeToken === currencyCodeUpper;
+    };
 
     for (const token of tokens) {
       const chainNameUpper = upper(token?.chain);
@@ -331,11 +456,11 @@ async function updateTokensWithContractAddresses() {
       if (!currencyInfo) {
         // No currency info from CoinStore API
         // If contract address is empty or not exists, set based on token type
-        const isMajorToken = MAJOR_TOKENS.has(currencyCodeUpper);
+        const isNative = isNativeToken(currencyCodeUpper, chainNameUpper);
         const currentAddress = String(token?.contact_address || '').trim();
         
         if (!currentAddress) {
-          const newAddress = isMajorToken ? NATIVE_ADDRESS : ZERO_ADDRESS;
+          const newAddress = isNative ? NATIVE_ADDRESS : ZERO_ADDRESS;
           // eslint-disable-next-line no-param-reassign
           token.contact_address = newAddress;
           updatedCount += 1;
@@ -349,11 +474,11 @@ async function updateTokensWithContractAddresses() {
       if (!chainData) {
         // Chain data not found in CoinStore API
         // If contract address is empty or not exists, set based on token type
-        const isMajorToken = MAJOR_TOKENS.has(currencyCodeUpper);
+        const isNative = isNativeToken(currencyCodeUpper, chainNameUpper);
         const currentAddress = String(token?.contact_address || '').trim();
         
         if (!currentAddress) {
-          const newAddress = isMajorToken ? NATIVE_ADDRESS : ZERO_ADDRESS;
+          const newAddress = isNative ? NATIVE_ADDRESS : ZERO_ADDRESS;
           // eslint-disable-next-line no-param-reassign
           token.contact_address = newAddress;
           updatedCount += 1;
@@ -367,8 +492,8 @@ async function updateTokensWithContractAddresses() {
       if (!newAddress) {
         // Contract address from CoinStore API is empty
         // Set based on token type
-        const isMajorToken = MAJOR_TOKENS.has(currencyCodeUpper);
-        newAddress = isMajorToken ? NATIVE_ADDRESS : ZERO_ADDRESS;
+        const isNative = isNativeToken(currencyCodeUpper, chainNameUpper);
+        newAddress = isNative ? NATIVE_ADDRESS : ZERO_ADDRESS;
       }
 
       if (token.contact_address !== newAddress) {
