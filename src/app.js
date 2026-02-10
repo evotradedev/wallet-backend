@@ -7,6 +7,7 @@ const morgan = require('morgan');
 const { errorHandler } = require('./middleware/errorHandler');
 const exchangeRoutes = require('./routes/exchangeRoutes');
 const logger = require('./utils/logger');
+const { updateTokensWithContractAddresses } = require('./services/tokenUpdateService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,9 +46,25 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   logger.info(`EvoTrade Backend server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+
+  // Update tokens.json with CoinStore currency information on startup
+  logger.info('Backend startup: updating tokens.json with contract addresses...');
+  try {
+    const result = await updateTokensWithContractAddresses();
+    if (result.success) {
+      logger.info('Backend startup: token update completed successfully', result);
+    } else {
+      logger.error('Backend startup: token update failed', result);
+    }
+  } catch (error) {
+    logger.error('Backend startup: error during token update', {
+      error: error.message,
+      stack: error.stack
+    });
+  }
 });
 
 module.exports = app;

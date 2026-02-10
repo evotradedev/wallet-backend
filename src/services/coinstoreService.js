@@ -13,9 +13,6 @@ class CoinStoreService {
     // User-Agent to avoid Cloudflare bot detection
     this.userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-    // Queue for getCurrencyInformation requests - ensures only one request at a time
-    this._currencyInfoQueue = Promise.resolve();
-
     this.client = axios.create({
       baseURL: this.baseURL,
       timeout: this.timeout,
@@ -565,33 +562,10 @@ class CoinStoreService {
 
   /**
    * Get currency information from Coinstore
-   * Queues requests to ensure only one API call happens at a time
    * @param {string} currencyCode - Currency code (e.g., "ETH")
    * @returns {Promise<Object>} Currency information with chainDataList
    */
   async getCurrencyInformation(currencyCode) {
-    // Queue this request to ensure only one getCurrencyInformation call happens at a time
-    this._currencyInfoQueue = this._currencyInfoQueue.then(async () => {
-      return this._executeGetCurrencyInformation(currencyCode);
-    }).catch(async (error) => {
-      // If previous request failed, still process this one
-      logger.warn('CoinStore API: getCurrencyInformation - Previous request in queue failed, processing next', {
-        error: error.message,
-        currencyCode
-      });
-      return this._executeGetCurrencyInformation(currencyCode);
-    });
-
-    return this._currencyInfoQueue;
-  }
-
-  /**
-   * Internal method to execute the actual getCurrencyInformation API call
-   * @param {string} currencyCode - Currency code (e.g., "ETH")
-   * @returns {Promise<Object>} Currency information with chainDataList
-   * @private
-   */
-  async _executeGetCurrencyInformation(currencyCode) {
     try {
       if (!this.apiKey || !this.apiSecret) {
         throw new Error('CoinStore API credentials are not configured');
