@@ -9,11 +9,18 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const NATIVE_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 const POLYGON_NATIVE_PROXY = '0x0000000000000000000000000000000000001010';
 
-const DEFAULT_LOGO_URI = 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040';
+const DEFAULT_LOGO_URI = 'https://cryptologos.cc/logos/bitcoin-sv-bsv-logo.png?v=040';
 const LOGO_URI_BY_CURRENCY = {
   USDT: 'https://cryptologos.cc/logos/tether-usdt-logo.png?v=040',
   USDC: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png?v=040',
-  POL: 'https://cryptologos.cc/logos/polygon-matic-logo.png?v=040'
+  BTC: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040',
+  BITCOIN: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040',
+  POLYGON: 'https://cryptologos.cc/logos/polygon-matic-logo.png?v=040',
+  MATIC: 'https://cryptologos.cc/logos/polygon-matic-logo.png?v=040',
+  POL: 'https://cryptologos.cc/logos/polygon-matic-logo.png?v=040',
+  BNB: 'https://cryptologos.cc/logos/bnb-bnb-logo.png?v=040',
+  ETH: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040',
+  ETHEREUM: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040'
 };
 
 const TOKENS_CACHE_TTL_MS = Number(process.env.TOKENS_CACHE_TTL_MS) || 10 * 60 * 1000; // 10 minutes
@@ -172,6 +179,9 @@ async function buildTokensData({ chains = null } = {}) {
         ? '18'
         : String(decimalsRaw);
 
+    const logoFromStatic = safeTrimString(t?.logoURI);
+    const logoUri = logoFromStatic || getLogoUri(currencyCodeUpper);
+
     tokens.push({
       tokenId: String(tokenId),
       tokenName: String(t?.currency_name || ''),
@@ -179,7 +189,7 @@ async function buildTokensData({ chains = null } = {}) {
       chainName: String(chainData?.chainName || chainNameUpper),
       contractAddress,
       decimals,
-      Logo_URI: getLogoUri(currencyCodeUpper)
+      Logo_URI: logoUri
     });
   }
 

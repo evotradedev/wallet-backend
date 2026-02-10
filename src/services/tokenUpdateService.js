@@ -5,9 +5,27 @@ const logger = require('../utils/logger');
 
 const TOKENS_UPDATE_CONCURRENCY = Number(process.env.TOKENS_UPDATE_CONCURRENCY) || 5;
 const TOKENS_UPDATE_DELAY_MS = Number(process.env.TOKENS_UPDATE_DELAY_MS) || 200; // 200ms delay between API calls
+const NATIVE_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+const DEFAULT_LOGO_URI = 'https://cryptologos.cc/logos/bitcoin-sv-bsv-logo.png?v=040';
+const LOGO_URI_BY_TOKEN_NAME = {
+  USDT: 'https://cryptologos.cc/logos/tether-usdt-logo.png?v=040',
+  USDC: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png?v=040',
+  BTC: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040',
+  BITCOIN: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040',
+  POLYGON: 'https://cryptologos.cc/logos/polygon-matic-logo.png?v=040',
+  MATIC: 'https://cryptologos.cc/logos/polygon-matic-logo.png?v=040',
+  POL: 'https://cryptologos.cc/logos/polygon-matic-logo.png?v=040',
+  BNB: 'https://cryptologos.cc/logos/bnb-bnb-logo.png?v=040',
+  ETH: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040',
+  ETHEREUM: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040'
+};
 
 function upper(value) {
   return String(value || '').trim().toUpperCase();
+}
+
+function getLogoUri(tokenNameUpper) {
+  return LOGO_URI_BY_TOKEN_NAME[tokenNameUpper] || DEFAULT_LOGO_URI;
 }
 
 async function mapLimit(items, concurrency, iteratorFn) {
@@ -108,11 +126,19 @@ async function updateTokensWithContractAddresses() {
     });
 
     let updatedCount = 0;
+    let logoUpdatedCount = 0;
     let skippedCount = 0;
 
     for (const token of tokens) {
       const chainNameUpper = upper(token?.chain);
       const currencyCodeUpper = upper(token?.currency_name);
+
+      const desiredLogoUri = getLogoUri(currencyCodeUpper);
+      if (token.logoURI !== desiredLogoUri) {
+        // eslint-disable-next-line no-param-reassign
+        token.logoURI = desiredLogoUri;
+        logoUpdatedCount += 1;
+      }
 
       if (!currencyCodeUpper || !chainNameUpper) {
         skippedCount += 1;
@@ -126,15 +152,14 @@ async function updateTokensWithContractAddresses() {
       }
 
       const chainData = findMatchingChainData(currencyInfo, chainNameUpper);
-      if (!chainData || !chainData.contractAddress) {
+      if (!chainData) {
         skippedCount += 1;
         continue;
       }
 
-      const newAddress = String(chainData.contractAddress).trim();
+      let newAddress = String(chainData.contractAddress || '').trim();
       if (!newAddress) {
-        skippedCount += 1;
-        continue;
+        newAddress = NATIVE_ADDRESS;
       }
 
       if (token.contact_address !== newAddress) {
@@ -144,9 +169,10 @@ async function updateTokensWithContractAddresses() {
       }
     }
 
-    if (updatedCount > 0) {
+    if (updatedCount > 0 || logoUpdatedCount > 0) {
       logger.info('TokenUpdateService: Writing updated tokens.json', {
         updatedCount,
+        logoUpdatedCount,
         skippedCount,
         totalTokens: tokens.length
       });
@@ -155,12 +181,14 @@ async function updateTokensWithContractAddresses() {
 
       logger.info('TokenUpdateService: Successfully updated tokens.json', {
         updatedCount,
+        logoUpdatedCount,
         skippedCount,
         totalTokens: tokens.length
       });
     } else {
       logger.info('TokenUpdateService: No updates needed', {
         updatedCount,
+        logoUpdatedCount,
         skippedCount,
         totalTokens: tokens.length
       });
@@ -169,6 +197,7 @@ async function updateTokensWithContractAddresses() {
     return {
       success: true,
       updatedCount,
+      logoUpdatedCount,
       skippedCount,
       totalTokens: tokens.length
     };

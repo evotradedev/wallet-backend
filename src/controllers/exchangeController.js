@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const coinstoreService = require('../services/coinstoreService');
 const blockchainService = require('../services/blockchainService');
 const tokenListService = require('../services/tokenListService');
@@ -877,11 +879,11 @@ const exchangeController = {
   },
 
   /**
-   * Get currency information from Coinstore
+   * Get currency information from tokens.json (no Coinstore API)
    */
   getCurrencyInformation: async (req, res, next) => {
     try {
-      const { symbol, address } = req.body;
+      const { symbol, address, chain } = req.body;
 
       if (!symbol) {
         return res.status(400).json({
@@ -892,33 +894,59 @@ const exchangeController = {
 
       logger.info('Get currency information request received:', {
         symbol,
-        address
+        address,
+        chain
       });
 
-      // Call coinstore API to get currency information
-      const result = await coinstoreService.getCurrencyInformation(symbol.toUpperCase());
+      const tokensPath = path.join(__dirname, '..', '..', 'public', 'tokens.json');
+      const raw = await fs.promises.readFile(tokensPath, 'utf8');
+      const tokens = JSON.parse(raw);
 
-      if (!result.success) {
-        return res.status(400).json({
+      if (!Array.isArray(tokens)) {
+        return res.status(500).json({
           success: false,
-          message: result.error?.message || 'Failed to get currency information',
-          error: result.error
+          message: 'tokens.json is invalid'
         });
       }
 
-      // Find chainData where contractAddress matches the token address
-      let chainData = null;
-      if (address && result.data?.chainDataList) {
-        chainData = result.data.chainDataList.find(
-          item => item.contractAddress && 
-          item.contractAddress.toLowerCase() === address.toLowerCase()
-        );
+      const symbolUpper = String(symbol).trim().toUpperCase();
+      const addressLower = address ? String(address).trim().toLowerCase() : '';
+      const chainLower = chain ? String(chain).trim().toLowerCase() : '';
+      const hasAddressField = tokens.some((t) => t?.contract_address || t?.contact_address);
+
+      const candidates = tokens.filter((t) => {
+        const tSymbol = String(t?.currency_name || '').trim().toUpperCase();
+        if (tSymbol !== symbolUpper) return false;
+
+        if (chainLower) {
+          const tChain = String(t?.chain || '').trim().toLowerCase();
+          if (tChain !== chainLower) return false;
+        }
+
+        if (addressLower && hasAddressField) {
+          const tAddress = String(t?.contract_address || t?.contact_address || '').trim().toLowerCase();
+          if (!tAddress || tAddress !== addressLower) return false;
+        }
+
+        return true;
+      });
+
+      const match = candidates[0] || null;
+
+      if (!match) {
+        return res.status(404).json({
+          success: false,
+          message: 'Token not found in tokens.json'
+        });
       }
 
-      // If no matching chainData found by address, return the first one or null
-      if (!chainData && result.data?.chainDataList?.length > 0) {
-        chainData = result.data.chainDataList[0];
-      }
+      const chainName = String(match?.chain || '').trim().toUpperCase();
+      const chainData = {
+        chainName,
+        currencyCode: symbolUpper,
+        contractPrecision: match?.contract_precision,
+        showPrecision: match?.show_precision
+      };
 
       res.json({
         success: true,
