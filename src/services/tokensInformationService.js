@@ -156,6 +156,11 @@ async function buildTokensData({ chains = null } = {}) {
       contractAddress = NATIVE_ADDRESS;
     }
 
+    // Filter out tokens with ZERO_ADDRESS - don't send them to clients
+    if (contractAddress.toLowerCase() === ZERO_ADDRESS.toLowerCase()) {
+      continue;
+    }
+
     // Special case: POL should use Polygon native proxy address
     if (currencyCodeUpper === 'POL') {
       contractAddress = POLYGON_NATIVE_PROXY;
@@ -288,6 +293,11 @@ async function updateTokensWithContractAddresses() {
     let logoUpdatedCount = 0;
     let skippedCount = 0;
 
+    // Define major tokens (native tokens for each chain)
+    const MAJOR_TOKENS = new Set([
+      'ETH', 'BNB', 'TRX', 'BTC', 'MATIC', 'POL', 'SOL', 'AVAX', 'FTM', 'ATOM', 'DOT', 'ADA'
+    ]);
+
     for (const token of tokens) {
       const chainNameUpper = upper(token?.chain);
       const currencyCodeUpper = upper(token?.currency_name);
@@ -319,19 +329,46 @@ async function updateTokensWithContractAddresses() {
 
       const currencyInfo = currencyInfoMap.get(currencyCodeUpper);
       if (!currencyInfo) {
+        // No currency info from CoinStore API
+        // If contract address is empty or not exists, set based on token type
+        const isMajorToken = MAJOR_TOKENS.has(currencyCodeUpper);
+        const currentAddress = String(token?.contact_address || '').trim();
+        
+        if (!currentAddress) {
+          const newAddress = isMajorToken ? NATIVE_ADDRESS : ZERO_ADDRESS;
+          // eslint-disable-next-line no-param-reassign
+          token.contact_address = newAddress;
+          updatedCount += 1;
+        }
+        
         skippedCount += 1;
         continue;
       }
 
       const chainData = findMatchingChainData(currencyInfo, chainNameUpper);
       if (!chainData) {
+        // Chain data not found in CoinStore API
+        // If contract address is empty or not exists, set based on token type
+        const isMajorToken = MAJOR_TOKENS.has(currencyCodeUpper);
+        const currentAddress = String(token?.contact_address || '').trim();
+        
+        if (!currentAddress) {
+          const newAddress = isMajorToken ? NATIVE_ADDRESS : ZERO_ADDRESS;
+          // eslint-disable-next-line no-param-reassign
+          token.contact_address = newAddress;
+          updatedCount += 1;
+        }
+        
         skippedCount += 1;
         continue;
       }
 
       let newAddress = String(chainData.contractAddress || '').trim();
       if (!newAddress) {
-        newAddress = NATIVE_ADDRESS;
+        // Contract address from CoinStore API is empty
+        // Set based on token type
+        const isMajorToken = MAJOR_TOKENS.has(currencyCodeUpper);
+        newAddress = isMajorToken ? NATIVE_ADDRESS : ZERO_ADDRESS;
       }
 
       if (token.contact_address !== newAddress) {
