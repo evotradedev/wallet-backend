@@ -147,6 +147,7 @@ async function buildTokensData({ chains = null } = {}) {
     const chainNameUpper = upper(t?.chain);
     const currencyName = safeTrimString(t?.currency_name);
     const currencyCodeUpper = upper(currencyName);
+    const tokenName = safeTrimString(t?.tokenName);
 
     if (!currencyCodeUpper || !chainNameUpper) continue;
 
@@ -171,7 +172,7 @@ async function buildTokensData({ chains = null } = {}) {
 
     tokens.push({
       tokenId: String(tokenId),
-      tokenName: currencyName || currencyCodeUpper,
+      tokenName: tokenName || currencyCodeUpper,
       currencyCode: currencyCodeUpper,
       chainName: chainNameUpper,
       contractAddress,
