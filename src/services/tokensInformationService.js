@@ -67,6 +67,16 @@ async function readStaticTokens() {
   return parsed;
 }
 
+async function readTokensFile() {
+  const tokensPath = path.join(__dirname, '..', '..', 'public', 'tokens.json');
+  const raw = await fs.promises.readFile(tokensPath, 'utf8');
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new Error('tokens.json is not an array');
+  }
+  return { tokensPath, tokens: parsed };
+}
+
 function buildCacheKey(chains) {
   if (!chains || chains.length === 0) return 'all';
   return chains.map(lower).sort().join(',');
@@ -227,15 +237,7 @@ async function getTokensData({ chains = null, refresh = false } = {}) {
  */
 async function updateTokensWithContractAddresses() {
   try {
-    const tokensPath = path.join(__dirname, '..', '..', 'public', 'tokens.json');
-
-    logger.info('TokenInformationService: Reading tokens.json...');
-    const raw = await fs.promises.readFile(tokensPath, 'utf8');
-    const tokens = JSON.parse(raw);
-
-    if (!Array.isArray(tokens)) {
-      throw new Error('tokens.json is not an array');
-    }
+    const { tokensPath, tokens } = await readTokensFile();
 
     logger.info('TokenInformationService: Starting token update process', {
       totalTokens: tokens.length
@@ -388,10 +390,41 @@ async function updateTokensWithContractAddresses() {
   }
 }
 
+/**
+ * Checks whether tokens.json has any missing contract address or logoURI.
+ * Returns true if an update is needed, false if everything looks complete.
+ */
+async function shouldUpdateTokensFile() {
+  try {
+    const { tokens } = await readTokensFile();
+
+    for (const token of tokens) {
+      const contractAddress = safeTrimString(
+        token?.contract_address || token?.contact_address || token?.contractAddress || token?.address
+      );
+      const logoUri = safeTrimString(token?.logoURI || token?.logo_uri || token?.logo);
+
+      if (!contractAddress || !logoUri) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch (error) {
+    logger.error('TokenInformationService: Error checking tokens.json completeness', {
+      error: error.message,
+      stack: error.stack
+    });
+    // In case of any error, be safe and indicate that an update is needed
+    return true;
+  }
+}
+
 module.exports = {
   getTokensData,
   updateTokensWithContractAddresses,
   // Also export some low-level utilities if needed elsewhere in the future
-  buildTokensData
+  buildTokensData,
+  shouldUpdateTokensFile
 };
 

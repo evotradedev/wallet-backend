@@ -7,7 +7,10 @@ const morgan = require('morgan');
 const { errorHandler } = require('./middleware/errorHandler');
 const exchangeRoutes = require('./routes/exchangeRoutes');
 const logger = require('./utils/logger');
-const { updateTokensWithContractAddresses } = require('./services/tokensInformationService');
+const {
+  updateTokensWithContractAddresses,
+  shouldUpdateTokensFile
+} = require('./services/tokensInformationService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,14 +53,23 @@ app.listen(PORT, async () => {
   logger.info(`EvoTrade Backend server running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
-  // Update tokens.json with CoinStore currency information on startup
-  logger.info('Backend startup: updating tokens.json with contract addresses...');
+  // On startup, only update tokens.json if any token is missing contract address or logoURI
+  logger.info('Backend startup: checking if tokens.json update is needed...');
   try {
-    const result = await updateTokensWithContractAddresses();
-    if (result.success) {
-      logger.info('Backend startup: token update completed successfully', result);
+    const needsUpdate = await shouldUpdateTokensFile();
+
+    if (!needsUpdate) {
+      logger.info(
+        'Backend startup: tokens.json already has contract addresses and logoURIs for all tokens, skipping update'
+      );
     } else {
-      logger.error('Backend startup: token update failed', result);
+      logger.info('Backend startup: updating tokens.json with contract addresses...');
+      const result = await updateTokensWithContractAddresses();
+      if (result.success) {
+        logger.info('Backend startup: token update completed successfully', result);
+      } else {
+        logger.error('Backend startup: token update failed', result);
+      }
     }
   } catch (error) {
     logger.error('Backend startup: error during token update', {
