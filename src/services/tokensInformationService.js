@@ -289,6 +289,16 @@ async function updateTokensWithContractAddresses() {
       const chainNameUpper = upper(token?.chain);
       const currencyCodeUpper = upper(token?.currency_name);
 
+      // Normalize display name: "[SYMBOL] ([CHAIN])"
+      if (currencyCodeUpper && chainNameUpper) {
+        const desiredDisplayName = `${currencyCodeUpper} (${chainNameUpper})`;
+        if (token.currency_name !== desiredDisplayName) {
+          // eslint-disable-next-line no-param-reassign
+          token.currency_name = desiredDisplayName;
+          updatedCount += 1;
+        }
+      }
+
       const desiredLogoUri = getLogoUri(currencyCodeUpper);
       if (token.logoURI !== desiredLogoUri) {
         // eslint-disable-next-line no-param-reassign
@@ -324,6 +334,15 @@ async function updateTokensWithContractAddresses() {
         updatedCount += 1;
       }
     }
+
+    // Sort tokens by normalized display name before saving
+    tokens.sort((a, b) => {
+      const nameA = upper(a?.currency_name);
+      const nameB = upper(b?.currency_name);
+      if (nameA < nameB) return -1;
+      if (nameA > nameB) return 1;
+      return 0;
+    });
 
     if (updatedCount > 0 || logoUpdatedCount > 0) {
       logger.info('TokenInformationService: Writing updated tokens.json', {
