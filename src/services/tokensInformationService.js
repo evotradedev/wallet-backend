@@ -291,12 +291,15 @@ async function updateTokensWithContractAddresses() {
       const chainNameUpper = upper(token?.chain);
       const currencyCodeUpper = upper(token?.currency_name);
 
-      // Normalize display name: "[SYMBOL] ([CHAIN])"
-      if (currencyCodeUpper && chainNameUpper) {
-        const desiredDisplayName = `${currencyCodeUpper} (${chainNameUpper})`;
-        if (token.currency_name !== desiredDisplayName) {
+      const currencyNameRaw = safeTrimString(token?.currency_name);
+      const chainNameRaw = safeTrimString(token?.chain);
+
+      // tokenName: "[currency name] ([chain name])" – do NOT modify currency_name
+      if (currencyNameRaw && chainNameRaw) {
+        const desiredTokenName = `${currencyNameRaw} (${chainNameRaw})`;
+        if (token.tokenName !== desiredTokenName) {
           // eslint-disable-next-line no-param-reassign
-          token.currency_name = desiredDisplayName;
+          token.tokenName = desiredTokenName;
           updatedCount += 1;
         }
       }
@@ -337,10 +340,10 @@ async function updateTokensWithContractAddresses() {
       }
     }
 
-    // Sort tokens by normalized display name before saving
+    // Sort tokens by tokenName (fallback to currency_name) before saving
     tokens.sort((a, b) => {
-      const nameA = upper(a?.currency_name);
-      const nameB = upper(b?.currency_name);
+      const nameA = upper(a?.tokenName || a?.currency_name);
+      const nameB = upper(b?.tokenName || b?.currency_name);
       if (nameA < nameB) return -1;
       if (nameA > nameB) return 1;
       return 0;
