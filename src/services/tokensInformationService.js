@@ -3,11 +3,21 @@ const path = require('path');
 const coinstoreService = require('./coinstoreService');
 const logger = require('../utils/logger');
 
+// Caching / update configuration
+const TOKENS_CACHE_TTL_MS = Number(process.env.TOKENS_CACHE_TTL_MS) || 10 * 60 * 1000; // 10 minutes
 const TOKENS_UPDATE_CONCURRENCY = Number(process.env.TOKENS_UPDATE_CONCURRENCY) || 5;
 const TOKENS_UPDATE_DELAY_MS = Number(process.env.TOKENS_UPDATE_DELAY_MS) || 200; // 200ms delay between API calls
+
+// Addresses / constants
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+// Placeholder address commonly used to represent the native currency (ETH/BNB/etc.)
+// Note: other parts of the codebase (e.g. blockchainService / exchange UI) treat this as "native".
 const NATIVE_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+const POLYGON_NATIVE_PROXY = '0x0000000000000000000000000000000000001010';
+
+// Logo URIs
 const DEFAULT_LOGO_URI = 'https://cryptologos.cc/logos/bitcoin-sv-bsv-logo.png?v=040';
-const LOGO_URI_BY_TOKEN_NAME = {
+const LOGO_URI_BY_CURRENCY = {
   USDT: 'https://cryptologos.cc/logos/tether-usdt-logo.png?v=040',
   USDC: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png?v=040',
   BTC: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png?v=040',
@@ -20,14 +30,55 @@ const LOGO_URI_BY_TOKEN_NAME = {
   ETHEREUM: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040'
 };
 
+// In-memory cache for tokens list
+let cache = {
+  key: null,
+  data: null,
+  expiresAt: 0,
+  inFlight: null
+};
+
+// Utility helpers
 function upper(value) {
   return String(value || '').trim().toUpperCase();
 }
 
-function getLogoUri(tokenNameUpper) {
-  return LOGO_URI_BY_TOKEN_NAME[tokenNameUpper] || DEFAULT_LOGO_URI;
+function lower(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
+function safeTrimString(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+
+function getLogoUri(currencyCodeUpper) {
+  return LOGO_URI_BY_CURRENCY[currencyCodeUpper] || DEFAULT_LOGO_URI;
+}
+
+// tokens.json helpers
+async function readStaticTokens() {
+  const tokensPath = path.join(__dirname, '..', '..', 'public', 'tokens.json');
+  const raw = await fs.promises.readFile(tokensPath, 'utf8');
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new Error('tokens.json is not an array');
+  }
+  return parsed;
+}
+
+function buildCacheKey(chains) {
+  if (!chains || chains.length === 0) return 'all';
+  return chains.map(lower).sort().join(',');
+}
+
+function getStaticTokenAddress(token) {
+  return safeTrimString(
+    token?.contract_address || token?.contact_address || token?.contractAddress || token?.address
+  );
+}
+
+// Concurrency helper (from tokenUpdateService)
 async function mapLimit(items, concurrency, iteratorFn) {
   const limit = Math.max(1, Number(concurrency) || 1);
   const results = new Array(items.length);
@@ -49,6 +100,7 @@ async function mapLimit(items, concurrency, iteratorFn) {
   return results;
 }
 
+// Chain data helper (from tokenUpdateService)
 function findMatchingChainData(currencyInfo, chainNameUpper) {
   const chainDataList = Array.isArray(currencyInfo?.chainDataList) ? currencyInfo.chainDataList : [];
   if (chainDataList.length === 0) return null;
@@ -62,6 +114,110 @@ function findMatchingChainData(currencyInfo, chainNameUpper) {
   return match || null;
 }
 
+// Build enriched tokens list from static tokens.json (from tokenListService)
+async function buildTokensData({ chains = null } = {}) {
+  const start = Date.now();
+  const staticTokens = await readStaticTokens();
+
+  const chainSet = Array.isArray(chains) && chains.length > 0 ? new Set(chains.map(lower)) : null;
+  const filteredTokens = chainSet
+    ? staticTokens.filter((t) => chainSet.has(lower(t?.chain)))
+    : staticTokens;
+
+  logger.info('TokenInformationService: building tokens list from static tokens.json', {
+    staticCount: staticTokens.length,
+    filteredCount: filteredTokens.length,
+    chains: chainSet ? Array.from(chainSet) : 'all'
+  });
+
+  const tokens = [];
+
+  for (const t of filteredTokens) {
+    const tokenId = t?.id;
+    const chainNameUpper = upper(t?.chain);
+    const currencyName = safeTrimString(t?.currency_name);
+    const currencyCodeUpper = upper(currencyName);
+
+    if (!currencyCodeUpper || !chainNameUpper) continue;
+
+    let contractAddress = getStaticTokenAddress(t);
+    if (!contractAddress) {
+      contractAddress = NATIVE_ADDRESS;
+    }
+
+    // Special case: POL should use Polygon native proxy address
+    if (currencyCodeUpper === 'POL') {
+      contractAddress = POLYGON_NATIVE_PROXY;
+    }
+
+    const decimalsRaw = t?.contract_precision ?? t?.decimals ?? t?.decimal;
+    const decimals =
+      decimalsRaw === undefined || decimalsRaw === null || String(decimalsRaw).trim() === ''
+        ? '18'
+        : String(decimalsRaw);
+
+    const logoFromStatic = safeTrimString(t?.logoURI || t?.logo_uri || t?.logo);
+    const logoUri = logoFromStatic || getLogoUri(currencyCodeUpper);
+
+    tokens.push({
+      tokenId: String(tokenId),
+      tokenName: currencyName || currencyCodeUpper,
+      currencyCode: currencyCodeUpper,
+      chainName: chainNameUpper,
+      contractAddress,
+      decimals,
+      Logo_URI: logoUri
+    });
+  }
+
+  const durationMs = Date.now() - start;
+  logger.info('TokenInformationService: tokens list built', {
+    count: tokens.length,
+    durationMs
+  });
+
+  return tokens;
+}
+
+// Public API: getTokensData (cached)
+async function getTokensData({ chains = null, refresh = false } = {}) {
+  const key = buildCacheKey(chains);
+  const now = Date.now();
+
+  if (!refresh && cache.key === key && cache.data && cache.expiresAt > now) {
+    return { success: true, data: cache.data, cached: true };
+  }
+
+  if (!refresh && cache.inFlight && cache.key === key) {
+    const data = await cache.inFlight;
+    return { success: true, data, cached: true };
+  }
+
+  cache.key = key;
+  cache.inFlight = (async () => {
+    try {
+      const data = await buildTokensData({ chains });
+      cache.data = data;
+      cache.expiresAt = Date.now() + TOKENS_CACHE_TTL_MS;
+      return data;
+    } catch (error) {
+      logger.error('TokenInformationService: failed to build tokens list', {
+        error: error.message,
+        stack: error.stack
+      });
+      // Keep serving previous cache if we have it
+      if (cache.data) return cache.data;
+      throw error;
+    } finally {
+      cache.inFlight = null;
+    }
+  })();
+
+  const data = await cache.inFlight;
+  return { success: true, data, cached: false };
+}
+
+// Public API: updateTokensWithContractAddresses (from tokenUpdateService)
 /**
  * Update tokens.json with contract addresses from CoinStore API.
  * For each token item, we:
@@ -73,7 +229,7 @@ async function updateTokensWithContractAddresses() {
   try {
     const tokensPath = path.join(__dirname, '..', '..', 'public', 'tokens.json');
 
-    logger.info('TokenUpdateService: Reading tokens.json...');
+    logger.info('TokenInformationService: Reading tokens.json...');
     const raw = await fs.promises.readFile(tokensPath, 'utf8');
     const tokens = JSON.parse(raw);
 
@@ -81,7 +237,7 @@ async function updateTokensWithContractAddresses() {
       throw new Error('tokens.json is not an array');
     }
 
-    logger.info('TokenUpdateService: Starting token update process', {
+    logger.info('TokenInformationService: Starting token update process', {
       totalTokens: tokens.length
     });
 
@@ -90,7 +246,7 @@ async function updateTokensWithContractAddresses() {
       new Set(tokens.map((t) => upper(t?.currency_name)).filter(Boolean))
     );
 
-    logger.info('TokenUpdateService: Fetching currency information', {
+    logger.info('TokenInformationService: Fetching currency information', {
       uniqueCurrencies: uniqueCurrencies.length,
       concurrency: TOKENS_UPDATE_CONCURRENCY
     });
@@ -107,18 +263,18 @@ async function updateTokensWithContractAddresses() {
 
         if (result?.success && result?.data) {
           currencyInfoMap.set(currencyCodeUpper, result.data);
-          logger.debug('TokenUpdateService: Fetched currency info', {
+          logger.debug('TokenInformationService: Fetched currency info', {
             currencyCode: currencyCodeUpper,
             chainDataCount: result.data.chainDataList?.length || 0
           });
         } else {
-          logger.warn('TokenUpdateService: Failed to fetch currency info', {
+          logger.warn('TokenInformationService: Failed to fetch currency info', {
             currencyCode: currencyCodeUpper,
             error: result?.error
           });
         }
       } catch (error) {
-        logger.error('TokenUpdateService: Error fetching currency info', {
+        logger.error('TokenInformationService: Error fetching currency info', {
           currencyCode: currencyCodeUpper,
           error: error.message
         });
@@ -170,7 +326,7 @@ async function updateTokensWithContractAddresses() {
     }
 
     if (updatedCount > 0 || logoUpdatedCount > 0) {
-      logger.info('TokenUpdateService: Writing updated tokens.json', {
+      logger.info('TokenInformationService: Writing updated tokens.json', {
         updatedCount,
         logoUpdatedCount,
         skippedCount,
@@ -179,14 +335,14 @@ async function updateTokensWithContractAddresses() {
 
       await fs.promises.writeFile(tokensPath, JSON.stringify(tokens, null, 2), 'utf8');
 
-      logger.info('TokenUpdateService: Successfully updated tokens.json', {
+      logger.info('TokenInformationService: Successfully updated tokens.json', {
         updatedCount,
         logoUpdatedCount,
         skippedCount,
         totalTokens: tokens.length
       });
     } else {
-      logger.info('TokenUpdateService: No updates needed', {
+      logger.info('TokenInformationService: No updates needed', {
         updatedCount,
         logoUpdatedCount,
         skippedCount,
@@ -202,7 +358,7 @@ async function updateTokensWithContractAddresses() {
       totalTokens: tokens.length
     };
   } catch (error) {
-    logger.error('TokenUpdateService: Error updating tokens', {
+    logger.error('TokenInformationService: Error updating tokens', {
       error: error.message,
       stack: error.stack
     });
@@ -214,6 +370,9 @@ async function updateTokensWithContractAddresses() {
 }
 
 module.exports = {
-  updateTokensWithContractAddresses
+  getTokensData,
+  updateTokensWithContractAddresses,
+  // Also export some low-level utilities if needed elsewhere in the future
+  buildTokensData
 };
 

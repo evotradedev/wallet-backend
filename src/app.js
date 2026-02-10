@@ -7,7 +7,7 @@ const morgan = require('morgan');
 const { errorHandler } = require('./middleware/errorHandler');
 const exchangeRoutes = require('./routes/exchangeRoutes');
 const logger = require('./utils/logger');
-const { updateTokensWithContractAddresses } = require('./services/tokenUpdateService');
+const { updateTokensWithContractAddresses } = require('./services/tokensInformationService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;

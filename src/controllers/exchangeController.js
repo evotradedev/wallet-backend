@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const coinstoreService = require('../services/coinstoreService');
 const blockchainService = require('../services/blockchainService');
-const tokenListService = require('../services/tokenListService');
+const tokensInformationService = require('../services/tokensInformationService');
 const logger = require('../utils/logger');
 
 const exchangeController = {
@@ -815,7 +815,7 @@ const exchangeController = {
         timestamp: new Date().toISOString()
       });
 
-      const result = await tokenListService.getAllTokensData({ chains, refresh });
+      const result = await tokensInformationService.getTokensData({ chains, refresh });
 
       const duration = Date.now() - startTime;
       res.json({
