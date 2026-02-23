@@ -5,13 +5,6 @@ const exchangeValidators = require('../middleware/validator');
 const router = express.Router();
 
 /**
- * @route   POST /api/exchange/quote
- * @desc    Get quote for token exchange
- * @access  Public
- */
-router.post('/quote', exchangeValidators.getQuote, exchangeController.getQuote);
-
-/**
  * @route   POST /api/exchange/swap
  * @desc    Execute token swap
  * @access  Public
@@ -19,17 +12,38 @@ router.post('/quote', exchangeValidators.getQuote, exchangeController.getQuote);
 router.post('/swap', exchangeValidators.executeSwap, exchangeController.executeSwap);
 
 /**
- * @route   GET /api/exchange/tokens/:chainId
- * @desc    Get supported tokens for a chain
+ * @route   POST /api/exchange/withdraw
+ * @desc    Execute withdrawal
  * @access  Public
  */
-router.get('/tokens/:chainId', exchangeValidators.getSupportedTokens, exchangeController.getSupportedTokens);
+router.post('/withdraw', exchangeValidators.withdraw, exchangeController.withdraw);
 
 /**
- * @route   GET /api/exchange/transaction/:txHash
- * @desc    Get transaction status
+ * @route   POST /api/exchange/deposit-address
+ * @desc    Get deposit address from Coinstore
  * @access  Public
  */
-router.get('/transaction/:txHash', exchangeValidators.getTransactionStatus, exchangeController.getTransactionStatus);
+router.post('/deposit-address', exchangeValidators.getDepositAddress, exchangeController.getDepositAddress);
+
+/**
+ * @route   POST /api/exchange/token-price
+ * @desc    Get token price from Coinstore
+ * @access  Public
+ */
+router.post('/token-price', exchangeController.getTokenPrice);
+
+/**
+ * @route   GET /api/exchange/tokens
+ * @desc    Get all tokens data (static tokens.json enriched with Coinstore currency information)
+ * @access  Public
+ */
+router.get('/tokens', exchangeController.getTokensData);
+
+/**
+ * @route   POST /api/exchange/currency-information
+ * @desc    Get currency information from Coinstore
+ * @access  Public
+ */
+router.post('/currency-information', exchangeController.getCurrencyInformation);
 
 module.exports = router;

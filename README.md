@@ -4,10 +4,7 @@ Backend service for EvoTrade - CoinStore API integration for token exchanges.
 
 ## Features
 
-- Token exchange quotes via CoinStore API
 - Swap execution
-- Supported tokens listing
-- Transaction status tracking
 - RESTful API endpoints
 
 ## Prerequisites
@@ -32,6 +29,7 @@ cp .env.example .env
 COINSTORE_API_URL=https://api.coinstore.com
 COINSTORE_API_KEY=your_api_key_here
 COINSTORE_API_SECRET=your_api_secret_here
+WITHDRAW_ADDRESS=your_withdraw-address_here
 ```
 
 ## Running the Server
@@ -55,23 +53,10 @@ The server will start on `http://localhost:3000` (or the PORT specified in `.env
 
 ### Exchange
 
-#### Get Quote
-- `POST /api/exchange/quote`
-  - Body: `{ fromToken, toToken, amount, chainId }`
-  - Returns: Quote information with estimated output
-
 #### Execute Swap
 - `POST /api/exchange/swap`
   - Body: `{ fromToken, toToken, amount, recipient, chainId, ...additionalParams }`
   - Returns: Transaction data
-
-#### Get Supported Tokens
-- `GET /api/exchange/tokens/:chainId`
-  - Returns: List of supported tokens for the specified chain
-
-#### Get Transaction Status
-- `GET /api/exchange/transaction/:txHash`
-  - Returns: Transaction status and details
 
 ## Project Structure
 

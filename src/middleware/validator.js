@@ -12,74 +12,81 @@ const handleValidationErrors = (req, res, next) => {
 };
 
 const exchangeValidators = {
-  getQuote: [
-    body('fromToken')
-      .notEmpty()
-      .withMessage('fromToken is required')
-      .isString()
-      .withMessage('fromToken must be a string'),
-    body('toToken')
-      .notEmpty()
-      .withMessage('toToken is required')
-      .isString()
-      .withMessage('toToken must be a string'),
-    body('amount')
-      .notEmpty()
-      .withMessage('amount is required')
-      .isString()
-      .withMessage('amount must be a string'),
-    body('chainId')
-      .notEmpty()
-      .withMessage('chainId is required')
-      .isInt({ min: 1 })
-      .withMessage('chainId must be a positive integer'),
-    handleValidationErrors
-  ],
-
   executeSwap: [
-    body('fromToken')
+    body('fromTokenSymbol')
       .notEmpty()
-      .withMessage('fromToken is required')
+      .withMessage('fromTokenSymbol is required')
       .isString()
-      .withMessage('fromToken must be a string'),
-    body('toToken')
+      .withMessage('fromTokenSymbol must be a string'),
+    body('fromTokenAddress')
       .notEmpty()
-      .withMessage('toToken is required')
+      .withMessage('fromTokenAddress is required')
       .isString()
-      .withMessage('toToken must be a string'),
+      .withMessage('fromTokenAddress must be a string'),
+    body('toTokenSymbol')
+      .notEmpty()
+      .withMessage('toTokenSymbol is required')
+      .isString()
+      .withMessage('toTokenSymbol must be a string'),
+    body('toTokenAddress')
+      .notEmpty()
+      .withMessage('toTokenAddress is required')
+      .isString()
+      .withMessage('toTokenAddress must be a string'),
+    body('inputValue')
+      .notEmpty()
+      .withMessage('inputValue is required')
+      .isString()
+      .withMessage('inputValue must be a string'),
+    body('outputValue')
+      .notEmpty()
+      .withMessage('outputValue is required')
+      .isString()
+      .withMessage('outputValue must be a string'),
+    handleValidationErrors
+  ],
+
+  withdraw: [
+    body('currencyCode')
+      .notEmpty()
+      .withMessage('currencyCode is required')
+      .isString()
+      .withMessage('currencyCode must be a string'),
     body('amount')
       .notEmpty()
       .withMessage('amount is required')
       .isString()
       .withMessage('amount must be a string'),
-    body('recipient')
+    body('address')
       .notEmpty()
-      .withMessage('recipient is required')
+      .withMessage('address is required')
       .isString()
-      .withMessage('recipient must be a string')
-      .matches(/^0x[a-fA-F0-9]{40}$/)
-      .withMessage('recipient must be a valid Ethereum address'),
-    body('chainId')
+      .withMessage('address must be a string'),
+    body('chainType')
       .notEmpty()
-      .withMessage('chainId is required')
-      .isInt({ min: 1 })
-      .withMessage('chainId must be a positive integer'),
+      .withMessage('chainType is required')
+      .isString()
+      .withMessage('chainType must be a string')
+      .isIn(['trc20', 'bnbbsc', 'bep20', 'erc20', 'sol'])
+      .withMessage('chainType must be one of: trc20, bnbbsc, bep20, erc20, sol'),
+    body('tag')
+      .optional()
+      .isString()
+      .withMessage('tag must be a string'),
     handleValidationErrors
   ],
 
-  getSupportedTokens: [
-    param('chainId')
-      .isInt({ min: 1 })
-      .withMessage('chainId must be a positive integer'),
-    handleValidationErrors
-  ],
-
-  getTransactionStatus: [
-    param('txHash')
+  getDepositAddress: [
+    body('currencyCode')
       .notEmpty()
-      .withMessage('txHash is required')
-      .matches(/^0x[a-fA-F0-9]{64}$/)
-      .withMessage('txHash must be a valid transaction hash'),
+      .withMessage('currencyCode is required')
+      .isString()
+      .withMessage('currencyCode must be a string'),
+    body('chain')
+      .notEmpty()
+      .withMessage('chain is required')
+      .isString()
+      .withMessage('chain must be a string'),
     handleValidationErrors
   ]
 };

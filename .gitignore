@@ -29,3 +29,8 @@ pids/
 *.pid
 *.seed
 *.pid.lock
+
+package-lock.json
+
+# Output
+output/
