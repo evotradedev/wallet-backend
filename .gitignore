@@ -34,3 +34,6 @@ package-lock.json
 
 # Output
 output/
+
+# PM2
+ecosystem.config.js
