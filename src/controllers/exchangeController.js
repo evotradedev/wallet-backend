@@ -179,6 +179,200 @@ const exchangeController = {
   },
 
   /**
+   * Process transfer fee when it is sent in FROM token units.
+   *
+   * Flow:
+   *  - If FROM token is the same as the TO-chain native token:
+   *      -> directly withdraw that token as the transfer fee.
+   *  - Else if FROM token is USDT:
+   *      -> treat the fee amount as USDT and call processTransferFee (USDT -> native -> withdraw).
+   *  - Else:
+   *      -> SELL FROM token -> USDT using fee amount,
+   *         then call processTransferFee with the resulting USDT.
+   */
+  processTransferFeeFromToken: async ({
+    fromTokenSymbol,
+    chainNativeSymbol,
+    toTokenChainType,
+    withdrawAddress,
+    transferFeeAmount // fee amount in FROM token units (string/number)
+  }) => {
+    try {
+      const feeStr = transferFeeAmount?.toString?.() || String(transferFeeAmount || '0');
+      const feeNum = parseFloat(feeStr);
+
+      if (!feeNum || feeNum <= 0) {
+        return {
+          success: true,
+          skipped: true,
+          reason: 'Transfer fee is zero or not provided'
+        };
+      }
+
+      logger.info('Processing transfer fee from FROM token:', {
+        fromTokenSymbol,
+        chainNativeSymbol,
+        toTokenChainType,
+        withdrawAddress,
+        transferFeeAmount: feeStr
+      });
+
+      // Case 1: TO-chain native token IS the FROM token -> no orders, just withdraw fee
+      if (fromTokenSymbol === chainNativeSymbol) {
+        logger.info('FROM token is the TO-chain native token; withdrawing fee directly.', {
+          symbol: chainNativeSymbol,
+          amount: feeStr
+        });
+
+        const withdrawResult = await coinstoreService.withdraw(
+          chainNativeSymbol,
+          feeStr,
+          withdrawAddress,
+          toTokenChainType,
+          ''
+        );
+
+        if (!withdrawResult.success) {
+          return {
+            success: false,
+            error: 'Withdrawal of native token (transfer fee) failed',
+            details: withdrawResult.error
+          };
+        }
+
+        const withdrawId = withdrawResult.data?.data;
+        if (!withdrawId) {
+          return {
+            success: false,
+            error: 'Withdrawal ID not found in transfer-fee withdrawal response'
+          };
+        }
+
+        logger.info('Transfer fee withdrawal (native token) successful:', {
+          withdrawId,
+          symbol: chainNativeSymbol,
+          amount: feeStr,
+          withdrawAddress,
+          chainType: toTokenChainType
+        });
+
+        return {
+          success: true,
+          data: {
+            mode: 'DIRECT_NATIVE_WITHDRAW',
+            withdrawal: withdrawResult.data
+          }
+        };
+      }
+
+      // Case 2 and 3: we need a USDT amount to feed into processTransferFee
+      let transferFeeUSDT = feeStr;
+      let sellOrderResult = null;
+      let sellOrderInfo = null;
+
+      // Case 2: FROM is USDT -> no SELL order, fee is already USDT
+      if (fromTokenSymbol === 'USDT') {
+        logger.info('FROM token is USDT; using transfer fee as USDT directly.', {
+          transferFeeUSDT: transferFeeUSDT
+        });
+      } else {
+        // Case 3: General case -> SELL FROM token to get USDT using fee amount
+        logger.info('Selling FROM token to USDT for transfer fee:', {
+          fromTokenSymbol,
+          amount: feeStr
+        });
+
+        sellOrderResult = await coinstoreService.createOrder({
+          symbol: `${fromTokenSymbol}USDT`, // FROM token vs USDT
+          side: 'SELL',
+          ordType: 'MARKET',
+          ordQty: feeStr // fee amount in FROM token
+        });
+
+        if (!sellOrderResult.success) {
+          return {
+            success: false,
+            error: 'Failed to create SELL order for transfer fee (FROM -> USDT)',
+            details: sellOrderResult.error
+          };
+        }
+
+        const sellOrderId = sellOrderResult.data?.ordId;
+        if (!sellOrderId) {
+          return {
+            success: false,
+            error: 'Order ID not found in transfer-fee SELL order result'
+          };
+        }
+
+        sellOrderInfo = await coinstoreService.getOrderInfo(sellOrderId);
+        if (!sellOrderInfo.success) {
+          return {
+            success: false,
+            error: 'Failed to get SELL order information for transfer fee',
+            details: sellOrderInfo.error
+          };
+        }
+
+        // For a SELL order, ordAmt is the quote amount (USDT)
+        transferFeeUSDT = sellOrderInfo.data?.ordAmt;
+        if (!transferFeeUSDT) {
+          return {
+            success: false,
+            error: 'ordAmt (USDT amount) not found in transfer-fee SELL order information'
+          };
+        }
+
+        logger.info('Transfer fee SELL order completed (FROM -> USDT):', {
+          ordId: sellOrderId,
+          fromTokenSymbol,
+          feeFromToken: feeStr,
+          transferFeeUSDT
+        });
+      }
+
+      // Now we have transferFeeUSDT; reuse existing processTransferFee
+      const nativeFeeResult = await exchangeController.processTransferFee(
+        transferFeeUSDT,
+        chainNativeSymbol,
+        toTokenChainType,
+        withdrawAddress
+      );
+
+      if (!nativeFeeResult.success) {
+        return {
+          success: false,
+          error: nativeFeeResult.error || 'USDT -> native transfer fee processing failed',
+          details: nativeFeeResult.details
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          mode:
+            fromTokenSymbol === 'USDT'
+              ? 'USDT_TO_NATIVE_VIA_PROCESS_TRANSFER_FEE'
+              : 'FROM_TO_USDT_TO_NATIVE_VIA_PROCESS_TRANSFER_FEE',
+          sellOrder: sellOrderResult?.data || null,
+          sellOrderInfo: sellOrderInfo?.data || null,
+          nativeFeeFlow: nativeFeeResult.data
+        }
+      };
+    } catch (error) {
+      logger.error('Error in processTransferFeeFromToken:', {
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+      return {
+        success: false,
+        error: error.message || 'Transfer fee (FROM token) processing failed'
+      };
+    }
+  },
+
+  /**
    * Execute main token swap (existing logic)
    */
   executeMainSwap: async (req, res, next) => {
@@ -630,7 +824,8 @@ const exchangeController = {
         walletAddress,
         fromTokenRpcUrl,
         toTokenRpcUrl,
-        transferfeeUSDT,
+        // Transfer fee amount in FROM token units
+        transferFeeFromToken,
         chainNativeSymbol
       } = req.body;
 
@@ -648,13 +843,13 @@ const exchangeController = {
         toTokenSymbol,
         inputValue,
         outputValue,
-        transferfeeUSDT,
+        transferFeeFromToken,
         chainNativeSymbol
       });
 
-      // Step 1: Process transfer fee if transferfeeUSDT and chainNativeSymbol are provided
+      // Step 1: Process transfer fee (FROM token -> USDT -> native -> withdraw)
       let transferFeeResult = null;
-      if (transferfeeUSDT && chainNativeSymbol && parseFloat(transferfeeUSDT) > 0) {
+      if (transferFeeFromToken && chainNativeSymbol && parseFloat(transferFeeFromToken) > 0) {
         // Determine chain type from toTokenChainName
         const chainTypeMap = {
           'Ethereum': 'ERC20',
@@ -667,12 +862,13 @@ const exchangeController = {
         // Get withdraw address from environment variable
         const withdrawAddress = process.env.WITHDRAW_ADDRESS || '0xe5829e9a19b0A7e524dFd0E0ff55Aff1A2A13D53';
 
-        transferFeeResult = await exchangeController.processTransferFee(
-          transferfeeUSDT,
+        transferFeeResult = await exchangeController.processTransferFeeFromToken({
+          fromTokenSymbol,
           chainNativeSymbol,
           toTokenChainType,
-          withdrawAddress
-        );
+          withdrawAddress,
+          transferFeeAmount: transferFeeFromToken
+        });
 
         if (!transferFeeResult.success) {
           return res.status(400).json({
@@ -687,7 +883,7 @@ const exchangeController = {
       }
 
       // Step 2: Process main swap using the updated input value
-      // The inputValue is already the updated value from frontend (expectedValue - transferfeeUSDT)
+      // The inputValue is already the updated value from frontend (expectedValue - transfer fee in FROM token)
       // Create a new request object with the same body (inputValue is already updated)
       const mainSwapReq = {
         ...req,
