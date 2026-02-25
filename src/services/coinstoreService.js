@@ -446,6 +446,72 @@ class CoinStoreService {
   }
 
   /**
+   * Get latest price for all symbols or specified symbols
+   * CoinStore API: GET /v1/ticker/price
+   * @param {string[]} symbols Optional list of symbol codes (e.g., ['btcusdt', 'eosusdt'])
+   *                           When empty, CoinStore returns all symbols.
+   * @returns {Promise<{success: boolean, data?: any, error?: any}>}
+   */
+  async getAllSymbols(symbols = []) {
+    try {
+      const params = {};
+
+      if (Array.isArray(symbols) && symbols.length > 0) {
+        params.symbol = symbols.join(',');
+      }
+
+      const url = `${this.baseURL}/v1/ticker/price`;
+
+      logger.info('CoinStore API: getAllSymbols - Request', {
+        url,
+        symbols: symbols.length ? symbols : 'all'
+      });
+
+      const response = await axios.get(url, {
+        params,
+        headers: {
+          'User-Agent': this.userAgent
+        },
+        timeout: this.timeout
+      });
+
+      if (response.data.code !== 0 && response.data.code !== '0') {
+        logger.error('CoinStore API: getAllSymbols - Failed', {
+          code: response.data.code,
+          message: response.data.message
+        });
+        return {
+          success: false,
+          error: {
+            code: response.data.code,
+            message: response.data.message
+          }
+        };
+      }
+
+      logger.info('CoinStore API: getAllSymbols - Success', {
+        resultCount: Array.isArray(response.data?.data) ? response.data.data.length : 0
+      });
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      logger.error('Error getting all symbols from CoinStore:', {
+        error: error.response?.data || error.message,
+        symbols,
+        stack: error.stack
+      });
+
+      return {
+        success: false,
+        error: error.response?.data || { message: error.message }
+      };
+    }
+  }
+
+  /**
    * Create order on Coinstore
    * @param {Object} orderParams - Order parameters
    * @param {string} orderParams.symbol - Trading pair symbol (e.g., "BTCUSDT")

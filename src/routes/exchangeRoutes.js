@@ -40,6 +40,13 @@ router.post('/token-price', exchangeController.getTokenPrice);
 router.get('/tokens', exchangeController.getTokensData);
 
 /**
+ * @route   GET /api/exchange/symbols
+ * @desc    Get latest price for all symbols (CoinStore /v1/ticker/price)
+ * @access  Public
+ */
+router.get('/symbols', exchangeController.getAllSymbols);
+
+/**
  * @route   POST /api/exchange/currency-information
  * @desc    Get currency information from Coinstore
  * @access  Public

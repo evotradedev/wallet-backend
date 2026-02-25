@@ -1098,6 +1098,51 @@ const exchangeController = {
   },
 
   /**
+   * Get latest price for all symbols (proxy to CoinStore /v1/ticker/price)
+   * Optional query: ?symbols=btcusdt,eosusdt (comma-separated)
+   */
+  getAllSymbols: async (req, res, next) => {
+    try {
+      const rawSymbols = req.query?.symbols;
+      let symbols = [];
+
+      if (typeof rawSymbols === 'string' && rawSymbols.trim()) {
+        symbols = rawSymbols
+          .split(',')
+          .map((s) => String(s || '').trim())
+          .filter(Boolean);
+      }
+
+      const result = await coinstoreService.getAllSymbols(symbols);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.error?.message || 'Failed to get symbols from CoinStore',
+          error: result.error
+        });
+      }
+
+      const list = Array.isArray(result.data?.data) ? result.data.data : [];
+
+      return res.json({
+        success: true,
+        data: list,
+        count: list.length
+      });
+    } catch (error) {
+      logger.error('Error in getAllSymbols controller:', {
+        error: error.message,
+        stack: error.stack
+      });
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to get symbols'
+      });
+    }
+  },
+
+  /**
    * Get currency information from tokens.json (no Coinstore API)
    */
   getCurrencyInformation: async (req, res, next) => {
