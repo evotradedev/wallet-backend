@@ -47,6 +47,13 @@ router.get('/tokens', exchangeController.getTokensData);
 router.get('/symbols', exchangeController.getAllSymbols);
 
 /**
+ * @route   POST /api/exchange/spot-information
+ * @desc    Get spot information (CoinStore /v2/public/config/spot/symbols)
+ * @access  Public
+ */
+router.post('/spot-information', exchangeController.getSpotInformation);
+
+/**
  * @route   POST /api/exchange/currency-information
  * @desc    Get currency information from Coinstore
  * @access  Public

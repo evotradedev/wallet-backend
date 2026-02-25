@@ -1143,6 +1143,82 @@ const exchangeController = {
   },
 
   /**
+   * Get spot information for one or more symbols.
+   * Proxies to CoinStore /v2/public/config/spot/symbols using symbolIds/symbolCodes
+   * received from EvoTrade Wallet.
+   *
+   * Body:
+   *  {
+   *    symbolCodes: ["BTCUSDT", "ETHUSDT"],
+   *    symbolIds: [1, 2]
+   *  }
+   */
+  getSpotInformation: async (req, res) => {
+    try {
+      const { symbolCodes, symbolIds } = req.body || {};
+
+      const codes =
+        Array.isArray(symbolCodes) && symbolCodes.length
+          ? symbolCodes
+          : symbolCodes
+          ? [String(symbolCodes)]
+          : [];
+
+      const idsRaw =
+        Array.isArray(symbolIds) && symbolIds.length
+          ? symbolIds
+          : symbolIds !== undefined && symbolIds !== null
+          ? [symbolIds]
+          : [];
+
+      const ids = idsRaw
+        .map((v) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        })
+        .filter((n) => n !== null);
+
+      if (!codes.length && !ids.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'symbolCodes or symbolIds must be provided'
+        });
+      }
+
+      logger.info('Get spot information request received from EvoTrade Wallet:', {
+        symbolCodes: codes,
+        symbolIds: ids
+      });
+
+      const result = await coinstoreService.getSymbolDetails(ids, codes);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.error?.message || 'Failed to get spot information from CoinStore',
+          error: result.error
+        });
+      }
+
+      // result.data is the raw CoinStore response:
+      // { code, message, data: [ { symbolId, symbolCode, ... } ] }
+      return res.json({
+        success: true,
+        data: result.data
+      });
+    } catch (error) {
+      logger.error('Error in getSpotInformation controller:', {
+        error: error.message,
+        stack: error.stack
+      });
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Failed to get spot information'
+      });
+    }
+  },
+
+  /**
    * Get currency information from tokens.json (no Coinstore API)
    */
   getCurrencyInformation: async (req, res, next) => {
